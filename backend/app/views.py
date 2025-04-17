@@ -3,226 +3,246 @@ import pandas as pd
 import uuid
 import json
 import re
+import io
 import logging
 import requests
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-from django.core.files.storage import default_storage
-from django.core.files.base import ContentFile
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Gemini API key
-GEMINI_API_KEY = "AIzaSyAaCLSYx0cwiGp5Eq4N3FkylX8H6dXCAzo"
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
-
+# Gemini API key and URL
+GEMINI_API_KEY = "AIzaSyB8gETGUcZwHqUmF1dJIm_MYbeWjWBup3M"
+GEMINI_API_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+)
 @csrf_exempt
 def merge_csv(request):
     """
-    View for merging multiple CSV files with the same structure.
-    Features:
-    - Validates that all CSV files have the same structure
-    - Removes duplicate rows
-    - Cleans data (handles missing values)
-    - Uses Gemini API for data validation and transformation suggestions
+    API view for merging multiple CSV files.
+    Handles file upload, parsing, merging, cleaning with Gemini API insights,
+    and provides a downloadable result.
     """
     if request.method != 'POST':
-        return JsonResponse({'error': 'Only POST method is allowed'}, status=405)
+        return JsonResponse({'error': 'Only POST requests are allowed'}, status=405)
 
-    # Check if files were provided
+    # Check if files are provided
     if 'csv_files' not in request.FILES:
-        return JsonResponse({'error': 'No files were provided'}, status=400)
+        return JsonResponse({'error': 'No files were uploaded'}, status=400)
 
-    csv_files = request.FILES.getlist('csv_files')
+    files = request.FILES.getlist('csv_files')
 
-    # Check if we have at least 2 files
-    if len(csv_files) < 2:
-        return JsonResponse({'error': 'At least 2 CSV files are required'}, status=400)
+    # Ensure we have at least 2 files
+    if len(files) < 2:
+        return JsonResponse({'error': 'Please upload at least 2 CSV files to merge'}, status=400)
 
     try:
-        # Process each file and store in a list
+        # Extract settings from the request
+        merge_type = request.POST.get('mergeType', 'inner')
+        column_match = request.POST.get('columnMatch', 'auto')
+        match_column = request.POST.get('matchColumn', '')
+        remove_empty_rows = request.POST.get('removeEmptyRows', 'true').lower() == 'true'
+        trim_whitespace = request.POST.get('trimWhitespace', 'true').lower() == 'true'
+        case_insensitive = request.POST.get('caseInsensitiveMatch', 'true').lower() == 'true'
+
+        # Read all CSV files into pandas DataFrames
         dataframes = []
-        columns = None
+        file_names = []
 
-        for csv_file in csv_files:
+        for file in files:
             try:
-                # Validate file extension
-                if not csv_file.name.lower().endswith('.csv'):
-                    return JsonResponse({
-                        'error': f"Invalid file format: {csv_file.name}",
-                        'details': "Only CSV files are allowed"
-                    }, status=400)
+                df = pd.read_csv(file)
 
-                # Read the CSV file with error handling for different encodings
-                try:
-                    df = pd.read_csv(csv_file)
-                except UnicodeDecodeError:
-                    # Try different encodings if UTF-8 fails
-                    for encoding in ['latin1', 'ISO-8859-1', 'cp1252']:
-                        try:
-                            csv_file.seek(0)  # Reset file pointer
-                            df = pd.read_csv(csv_file, encoding=encoding)
-                            break
-                        except:
-                            continue
-                    else:
+                # Apply initial cleaning based on settings
+                if trim_whitespace:
+                    for col in df.select_dtypes(include=['object']).columns:
+                        df[col] = df[col].str.strip() if isinstance(df[col], pd.Series) else df[col]
+
+                if case_insensitive and column_match == 'specific' and match_column:
+                    if match_column in df.columns and df[match_column].dtype == 'object':
+                        df[match_column] = df[match_column].str.lower() if isinstance(df[match_column], pd.Series) else df[match_column]
+
+                # Normalize 'Age' column if present
+                if 'Age' in df.columns:
+                    try:
+                        # Convert 'Age' to numeric, coercing errors to NaN
+                        df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
+                        # Optionally fill NaN with a default value (e.g., mean or 0)
+                        if df['Age'].isna().any():
+                            df['Age'] = df['Age'].fillna(df['Age'].mean() if not df['Age'].isna().all() else 0)
+                        # Ensure int64 type
+                        df['Age'] = df['Age'].astype('int64')
+                    except Exception as e:
+                        logger.warning(f"Error normalizing 'Age' in file {file.name}: {str(e)}")
                         return JsonResponse({
-                            'error': f"Encoding issue with file: {csv_file.name}",
-                            'details': "Could not determine the file encoding"
+                            'error': f"Invalid data in 'Age' column of file {file.name}",
+                            'details': str(e)
                         }, status=400)
 
-                # Check if dataframe is empty
-                if df.empty:
-                    return JsonResponse({
-                        'error': f"Empty file: {csv_file.name}",
-                        'details': "The CSV file does not contain any data"
-                    }, status=400)
-
-                # Check if columns are consistent across files
-                if columns is None:
-                    columns = set(df.columns)
-                elif set(df.columns) != columns:
-                    return JsonResponse({
-                        'error': 'CSV files have different structures',
-                        'details': f"File '{csv_file.name}' has different columns than previous files"
-                    }, status=400)
-
                 dataframes.append(df)
-            except pd.errors.ParserError as e:
-                return JsonResponse({
-                    'error': f"Error parsing file: {csv_file.name}",
-                    'details': f"CSV parsing error: {str(e)}"
-                }, status=400)
+                file_names.append(file.name)
             except Exception as e:
                 return JsonResponse({
-                    'error': f"Error reading file: {csv_file.name}",
+                    'error': f'Error parsing file {file.name}',
                     'details': str(e)
                 }, status=400)
 
-        # Check if any dataframes were successfully loaded
-        if not dataframes:
+        # Check that all DataFrames have data
+        if any(df.empty for df in dataframes):
             return JsonResponse({
-                'error': 'Failed to process any files',
-                'details': 'None of the uploaded files could be processed as CSV'
+                'error': 'One or more CSV files are empty',
+                'details': 'Please ensure all uploaded files contain data'
             }, status=400)
 
-        # Combine all dataframes
-        combined_df = pd.concat(dataframes, ignore_index=True)
+        # Collect a sample of data for Gemini API
+        sample_data = []
+        for df in dataframes:
+            if not df.empty:
+                sample_data.extend(df.head(3).to_dict('records'))
 
-        # Count rows before cleaning
-        total_rows = len(combined_df)
+        # Get column metadata
+        all_columns = set()
+        for df in dataframes:
+            all_columns.update(df.columns)
 
-        # Convert DataFrame to dictionary with native Python types (with error handling)
-        try:
-            # Convert all columns to string to ensure JSON serialization
-            data_sample = combined_df.head(10).astype(str).to_dict(orient="records")
-            gemini_insights = get_gemini_insights(data_sample, list(columns))
-        except Exception as e:
-            logger.warning(f"Error getting Gemini insights: {str(e)}")
-            gemini_insights = {"analysis": "Failed to get insights", "transformations": []}
+        # Get insights from Gemini API
+        gemini_insights = get_gemini_insights(sample_data, list(all_columns))
 
-        # Clean data - handle missing values
-        try:
-            cleaning_stats = clean_data(combined_df, gemini_insights)
-        except Exception as e:
-            logger.warning(f"Error during data cleaning: {str(e)}")
-            cleaning_stats = {'missing_values': 0, 'cleaned_columns': []}
+        # Perform the merge operation
+        if merge_type == 'concat':
+            # Use pd.concat for vertical stacking
+            merged_df = pd.concat(dataframes, ignore_index=True)
+        else:
+            # For merge operations
+            if column_match == 'specific' and match_column:
+                if not all(match_column in df.columns for df in dataframes):
+                    return JsonResponse({
+                        'error': f'Match column "{match_column}" not found in all files',
+                        'details': 'Please select a column that exists in all CSV files'
+                    }, status=400)
+
+                # Start with the first DataFrame
+                merged_df = dataframes[0]
+
+                # Merge with each remaining DataFrame
+                for i in range(1, len(dataframes)):
+                    try:
+                        merged_df = pd.merge(
+                            merged_df,
+                            dataframes[i],
+                            on=match_column,
+                            how=merge_type
+                        )
+                    except Exception as e:
+                        logger.error(f"Error merging on column {match_column}: {str(e)}")
+                        return JsonResponse({
+                            'error': f'Failed to merge on column "{match_column}"',
+                            'details': str(e)
+                        }, status=400)
+            else:
+                # Auto-match based on common columns
+                columns_sets = [set(df.columns) for df in dataframes]
+                common_columns = set.intersection(*columns_sets)
+
+                if not common_columns:
+                    return JsonResponse({
+                        'error': 'CSV files have no common columns',
+                        'details': 'The uploaded files must share at least one column name for merging'
+                    }, status=400)
+
+                # Normalize data types for common columns (especially 'Age')
+                for col in common_columns:
+                    if col == 'Age':
+                        # Already normalized above
+                        continue
+                    for df in dataframes:
+                        try:
+                            if df[col].dtype == 'object':
+                                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(df[col])
+                        except:
+                            pass  # Skip if conversion fails
+
+                # Start with the first DataFrame
+                merged_df = dataframes[0]
+
+                # Merge with each remaining DataFrame
+                for i in range(1, len(dataframes)):
+                    try:
+                        merged_df = pd.merge(
+                            merged_df,
+                            dataframes[i],
+                            on=list(common_columns),
+                            how=merge_type
+                        )
+                    except Exception as e:
+                        logger.error(f"Error merging on columns {common_columns}: {str(e)}")
+                        return JsonResponse({
+                            'error': f'Failed to merge on common columns',
+                            'details': str(e)
+                        }, status=400)
+
+        # Clean the merged DataFrame
+        cleaning_stats = clean_data(merged_df, gemini_insights)
+
+        # Remove empty rows if requested
+        if remove_empty_rows:
+            initial_rows = len(merged_df)
+            merged_df.dropna(how='all', inplace=True)
+            cleaning_stats['empty_rows_removed'] = initial_rows - len(merged_df)
 
         # Remove duplicates
-        combined_df_no_duplicates = combined_df.drop_duplicates()
-        duplicates_removed = len(combined_df) - len(combined_df_no_duplicates)
+        total_rows = len(merged_df)
+        merged_df.drop_duplicates(inplace=True)
+        duplicates_removed = total_rows - len(merged_df)
+        cleaning_stats['duplicates_removed'] = duplicates_removed
 
-        # Generate a unique filename for the merged file
-        output_filename = f"merged_csv_{uuid.uuid4().hex}.csv"
+        # Create a unique filename
+        unique_id = str(uuid.uuid4())
+        output_filename = f"merged_csv_{unique_id}.csv"
 
-        # Define the directory path
-        directory_path = 'csv_outputs'
-        file_path = os.path.join(directory_path, output_filename)
+        # Save to CSV buffer
+        csv_buffer = io.StringIO()
+        merged_df.to_csv(csv_buffer, index=False)
+        csv_content = csv_buffer.getvalue()
 
-        # Ensure the directory exists
-        try:
-            os.makedirs(directory_path, exist_ok=True)
-        except Exception as e:
-            logger.error(f"Failed to create directory {directory_path}: {str(e)}")
-            # Fall back to settings.MEDIA_ROOT
-            directory_path = getattr(settings, 'MEDIA_ROOT', 'media')
-            os.makedirs(directory_path, exist_ok=True)
-            file_path = os.path.join(directory_path, output_filename)
+        # Create response
+        response = HttpResponse(csv_content, content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="{output_filename}"'
 
-        # Save the file
-        try:
-            # Ensure the file path is relative to MEDIA_ROOT if using default_storage
-            relative_path = os.path.join('csv_outputs', output_filename)
-
-            # Convert to CSV string first to avoid file handling issues
-            csv_content = combined_df_no_duplicates.to_csv(index=False)
-
-            # Save using default_storage
-            default_storage.save(relative_path, ContentFile(csv_content))
-
-            # Generate download URL (without duplicate slashes)
-            media_url = getattr(settings, 'MEDIA_URL', '/media/').rstrip('/')
-            download_url = f"{media_url}/{relative_path}"
-
-        except Exception as e:
-            logger.error(f"Error saving CSV file: {str(e)}")
-
-            # Fallback: save to filesystem directly
-            try:
-                combined_df_no_duplicates.to_csv(file_path, index=False)
-                download_url = f"/media/csv_outputs/{output_filename}"
-            except Exception as inner_e:
-                logger.error(f"Fallback save also failed: {str(inner_e)}")
-                return JsonResponse({
-                    'error': 'Failed to save the merged file',
-                    'details': str(e)
-                }, status=500)
-
-        # Preview of the merged DataFrame
-        preview_data = combined_df_no_duplicates.head(10).astype(str).to_dict(orient="records")
-
-        # Return success response
-        return JsonResponse({
-            'success': True,
-            'rows_processed': total_rows,
-            'duplicates_removed': duplicates_removed,
-            'output_filename': output_filename,
-            'download_url': download_url,
-            'cleaned_data': cleaning_stats,
-            'preview': preview_data  # Include preview in the response
+        # Add metadata
+        response['X-Processing-Stats'] = json.dumps({
+            'input_files': len(files),
+            'input_files_names': file_names,
+            'output_rows': len(merged_df),
+            'output_columns': len(merged_df.columns),
+            'cleaning_stats': cleaning_stats,
+            'merge_type': merge_type
         })
 
-    except MemoryError:
-        logger.critical("Memory error while processing CSV files")
-        return JsonResponse({
-            'error': 'Out of memory',
-            'details': 'The CSV files are too large to process with available memory'
-        }, status=500)
+        return response
+
     except Exception as e:
-        # Log the error for further investigation
-        logger.exception(f"Unexpected error processing request: {str(e)}")
+        logger.exception(f"Error in merge_csv: {str(e)}")
         return JsonResponse({
             'error': 'An error occurred during processing',
             'details': str(e)
         }, status=500)
 
-
 def clean_data(df, gemini_insights=None):
     """
-    Clean the dataframe by handling missing values and applying transformations
-    Returns stats about cleaning operations
+    Clean the DataFrame by handling missing values and applying transformations
+    based on Gemini API insights.
     """
+    if df is None or df.empty:
+        return {'missing_values': 0, 'cleaned_columns': []}
+
     # Initial stats
     missing_values_count = df.isna().sum().sum()
     cleaned_columns = []
 
-    # Safety check
-    if df is None or df.empty:
-        return {'missing_values': 0, 'cleaned_columns': []}
-
-    # Apply insights from Gemini API if available
+    # Apply Gemini insights
     if gemini_insights and 'transformations' in gemini_insights:
         for transform in gemini_insights['transformations']:
             column = transform.get('column')
@@ -230,6 +250,8 @@ def clean_data(df, gemini_insights=None):
 
             if column and action and column in df.columns:
                 try:
+                    missing_before = df[column].isna().sum()
+
                     if action == 'fill_mean' and pd.api.types.is_numeric_dtype(df[column]):
                         if not df[column].empty and not df[column].isna().all():
                             df[column].fillna(df[column].mean(), inplace=True)
@@ -251,56 +273,67 @@ def clean_data(df, gemini_insights=None):
                     elif action == 'fill_empty':
                         df[column].fillna("", inplace=True)
                         cleaned_columns.append(column)
+
+                    missing_after = df[column].isna().sum()
+                    if missing_before > missing_after:
+                        logger.info(f"Cleaned column {column} using {action}: filled {missing_before - missing_after} values")
+
                 except Exception as e:
                     logger.warning(f"Error applying transformation to column {column}: {str(e)}")
                     continue
 
-    # Standard cleaning for remaining missing values
+    # Standard cleaning
     try:
-        # For numeric columns, fill with mean
         for column in df.select_dtypes(include=['number']).columns:
             if df[column].isna().any() and column not in cleaned_columns:
+                missing_before = df[column].isna().sum()
                 if not df[column].empty and not df[column].isna().all():
                     df[column].fillna(df[column].mean(), inplace=True)
                 else:
                     df[column].fillna(0, inplace=True)
                 cleaned_columns.append(column)
+                missing_after = df[column].isna().sum()
+                logger.info(f"Cleaned numeric column {column}: filled {missing_before - missing_after} values")
     except Exception as e:
         logger.warning(f"Error cleaning numeric columns: {str(e)}")
 
     try:
-        # For categorical/object columns, fill with mode or empty string
         for column in df.select_dtypes(exclude=['number']).columns:
             if df[column].isna().any() and column not in cleaned_columns:
+                missing_before = df[column].isna().sum()
                 if not df[column].empty and not df[column].mode().empty:
                     df[column].fillna(df[column].mode()[0], inplace=True)
                 else:
                     df[column].fillna("", inplace=True)
                 cleaned_columns.append(column)
+                missing_after = df[column].isna().sum()
+                logger.info(f"Cleaned non-numeric column {column}: filled {missing_before - missing_after} values")
     except Exception as e:
         logger.warning(f"Error cleaning non-numeric columns: {str(e)}")
 
-    # Return statistics about the cleaning
+    # Final stats
+    final_missing = df.isna().sum().sum()
+    values_filled = missing_values_count - final_missing
+
     return {
-        'missing_values': missing_values_count,
+        'initial_missing_values': int(missing_values_count),
+        'values_filled': int(values_filled),
+        'remaining_missing': int(final_missing),
         'cleaned_columns': cleaned_columns
     }
 
 def get_gemini_insights(data_sample, columns):
     """
-    Use Gemini API to get insights about the data and suggestions for cleaning
+    Use Gemini API to get insights and cleaning suggestions.
     """
     try:
-        headers = {
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
 
-        # Limit the size of the data sample to avoid request limits
         max_sample_size = 10
         if len(data_sample) > max_sample_size:
             data_sample = data_sample[:max_sample_size]
 
-        # Try to sanitize the data for JSON serialization
+        # Sanitize data
         safe_data = []
         for row in data_sample:
             safe_row = {}
@@ -313,62 +346,66 @@ def get_gemini_insights(data_sample, columns):
                     safe_row[k] = str(v)
             safe_data.append(safe_row)
 
+        # Determine column types
+        column_types = {}
+        for column in columns:
+            column_values = [row.get(column) for row in safe_data if column in row]
+            column_values = [v for v in column_values if v is not None]
+            if not column_values:
+                column_types[column] = "unknown"
+            elif all(isinstance(v, (int, float)) for v in column_values):
+                column_types[column] = "numeric"
+            else:
+                column_types[column] = "text/categorical"
+
+        column_type_info = "\n".join([f"- {col}: {typ}" for col, typ in column_types.items()])
+
         prompt = f"""
-        I have a CSV dataset with the following columns: {', '.join(columns)}
-        Here's a sample of the data: {json.dumps(safe_data)}
+        I need to clean and merge CSV files with the following columns: {', '.join(columns)}
 
-        Please analyze this data and suggest:
-        1. What cleaning operations should be applied to each column with missing values
-        2. How to handle duplicates
-        3. Any transformations that would improve data quality
+        Column types I've detected:
+        {column_type_info}
 
-        Format your response as JSON with the following structure:
+        Here's a sample of the data (showing up to {len(safe_data)} rows):
+        {json.dumps(safe_data, indent=2)}
+
+        As a data cleaning expert, please analyze this data and provide recommendations for:
+        1. How to handle missing values in each column
+        2. What transformations would improve data quality
+        3. How to handle duplicates
+
+        Format your response as JSON:
         {{
             "analysis": "brief description of data issues",
             "transformations": [
-                {{"column": "column_name", "action": "fill_mean|fill_median|fill_mode|fill_zero|fill_empty"}}
+                {{"column": "column_name", "action": "fill_mean|fill_median|fill_mode|fill_zero|fill_empty", "reason": "explanation"}}
             ]
         }}
-        Return ONLY the JSON without any explanations or markdown.
         """
 
-        # Ensure payload size is reasonable
-        if len(prompt) > 30000:  # Arbitrary limit to avoid API issues
+        if len(prompt) > 30000:
             prompt = prompt[:30000]
 
         payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": prompt}
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "temperature": 0.2,
-                "topP": 0.8,
-                "topK": 40
-            }
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.2, "topP": 0.8, "topK": 40}
         }
 
-        # Add timeout to avoid hanging
         url = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
         response = requests.post(url, headers=headers, json=payload, timeout=30)
 
         if response.status_code == 200:
             response_data = response.json()
-            if 'candidates' in response_data and len(response_data['candidates']) > 0:
+            if 'candidates' in response_data and response_data['candidates']:
                 text = response_data['candidates'][0]['content']['parts'][0]['text']
-                # Find valid JSON in the response
                 try:
-                    # Extract JSON if it's wrapped in code blocks or has extra text
+                    return json.loads(text)
+                except:
                     json_match = re.search(r'({[\s\S]*})', text)
                     if json_match:
-                        json_str = json_match.group(1)
-                        return json.loads(json_str)
-                    return json.loads(text)
-                except json.JSONDecodeError:
+                        return json.loads(json_match.group(1))
                     return {"analysis": "Could not parse Gemini response", "transformations": []}
+            return {"analysis": "No candidates in response", "transformations": []}
         else:
             logger.warning(f"Gemini API returned status code {response.status_code}")
             return {"analysis": f"API error: {response.status_code}", "transformations": []}

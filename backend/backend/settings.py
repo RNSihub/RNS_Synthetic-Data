@@ -174,3 +174,13 @@ if len(ENCRYPTION_KEY) < 32:
     ENCRYPTION_KEY = ENCRYPTION_KEY.ljust(32, '0')
 elif len(ENCRYPTION_KEY) > 32:
     ENCRYPTION_KEY = ENCRYPTION_KEY[:32] 
+    
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Media files configuration
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Create necessary directories for storing merged files
+MERGED_CSV_DIR = os.path.join(MEDIA_ROOT, 'merged_csv')
+os.makedirs(MERGED_CSV_DIR, exist_ok=True)
