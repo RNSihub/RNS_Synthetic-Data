@@ -16,7 +16,7 @@ export default function SyntheticDataGenerator() {
   const [error, setError] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
 
-  const MAX_ROWS = 1000;
+  const MAX_ROWS = 15000;
 
   const handleTableNameSelection = () => {
     setInputMethod('table');
