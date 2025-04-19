@@ -1,7 +1,10 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { useState, useEffect, createContext } from "react";
 import Home from "./pages/Home";
-import About from "./pages/About"; // Correct the import statement
+import HowItWorks from "./pages/hiw"; // Correct the import statement
+import LandingPage from "./pages/Landing";// Correct the import statement
+import Price_list from "./pages/pricing";
+import Informative from "./unoff/Info";
 import { Toaster } from 'react-hot-toast';
 
 // Create auth context
@@ -20,10 +23,12 @@ function App() {
       <Router>
         <Toaster position="top-right" />
         <Routes>
-          <Route path="/about" element={<About />} /> {/* Correct the element */}
-          <Route path="/" element={<Home />} />
+          <Route path="/howitworks" element={<HowItWorks />} /> {/* Correct the element */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/Landing" element={<LandingPage />} />
           <Route path="/home" element={<Home />} />
-          
+          <Route path="/price" element={<Price_list />} />
+          <Route path="/info" element={<Informative />} />
         </Routes>
       </Router>
   );

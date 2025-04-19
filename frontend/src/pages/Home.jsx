@@ -1,681 +1,664 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Upload, FileText, Check, X, AlertCircle, Settings, Download,
-         Filter, Table, Trash2, BarChart, ChevronDown, ChevronRight } from "lucide-react";
-import Papa from "papaparse";
+import React, { useState } from 'react';
+import { Database, FileType, Settings, Download, RefreshCw, CheckCircle, AlertCircle, Trash2, PlusCircle, X } from 'lucide-react';
 
-const CSVIntegrator = () => {
-  const [files, setFiles] = useState([]);
-  const [message, setMessage] = useState(null);
-  const [processing, setProcessing] = useState(false);
-  const [errorDetails, setErrorDetails] = useState(null);
-  const [previews, setPreviews] = useState([]);
-  const [activeTab, setActiveTab] = useState("upload");
-  const [settings, setSettings] = useState({
-    mergeType: "inner",
-    columnMatch: "auto",
-    matchColumn: "",
-    removeEmptyRows: true,
-    trimWhitespace: true,
-    caseInsensitiveMatch: true
+export default function Dashboard() {
+  const [activeTab, setActiveTab] = useState('generator');
+  const [generatedData, setGeneratedData] = useState([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [dataConfig, setDataConfig] = useState({
+    rows: 10,
+    dataTypes: ['names', 'emails', 'addresses', 'phone'],
+    format: 'json'
   });
-  const [matchColumns, setMatchColumns] = useState([]);
-  const [expandedPreviews, setExpandedPreviews] = useState([]);
-  const [statistics, setStatistics] = useState({});
-  const [mergedData, setMergedData] = useState(null);
-  const fileInputRef = useRef(null);
-  const dragCounter = useRef(0);
-  const [isDragging, setIsDragging] = useState(false);
-
-  // Determine common columns across files for potential matching
-  useEffect(() => {
-    if (previews.length >= 2) {
-      const columnsPerFile = previews.map(preview =>
-        preview.data.length > 0 ? Object.keys(preview.data[0]) : []
-      );
-
-      const commonColumns = columnsPerFile.reduce((acc, columns) => {
-        if (acc.length === 0) return columns;
-        return acc.filter(col => columns.includes(col));
-      }, []);
-
-      setMatchColumns(commonColumns);
-
-      // Automatically set the first common column as the match column
-      if (commonColumns.length > 0 && settings.columnMatch === "auto") {
-        setSettings(prev => ({...prev, matchColumn: commonColumns[0]}));
-      }
-
-      // Generate statistics for files
-      const newStats = {};
-      previews.forEach((preview, index) => {
-        const file = files[index];
-        if (!file) return;
-
-        newStats[file.name] = {
-          rowCount: preview.data.length,
-          columnCount: preview.data.length > 0 ? Object.keys(preview.data[0]).length : 0,
-          size: (file.size / 1024).toFixed(2) + " KB",
-          columns: preview.data.length > 0 ? Object.keys(preview.data[0]) : []
-        };
-      });
-      setStatistics(newStats);
-    }
-  }, [previews, files]);
-
-  // Handle drag and drop functionality
-  const handleDragIn = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current++;
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      setIsDragging(true);
-    }
+  
+  const handleGenerate = () => {
+    setIsGenerating(true);
+    // In a real implementation, this would call the Django backend
+    setTimeout(() => {
+      const mockData = Array(dataConfig.rows).fill().map((_, i) => ({
+        id: i + 1,
+        name: `User ${i + 1}`,
+        email: `user${i + 1}@example.com`,
+        address: `${100 + i} Main St, City`,
+        phone: `555-${String(1000 + i).slice(1)}`
+      }));
+      setGeneratedData(mockData);
+      setIsGenerating(false);
+    }, 1500);
   };
-
-  const handleDragOut = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current--;
-    if (dragCounter.current === 0) {
-      setIsDragging(false);
-    }
+  
+  const handleClearData = () => {
+    setGeneratedData([]);
   };
-
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    dragCounter.current = 0;
-
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFiles(Array.from(e.dataTransfer.files));
-      e.dataTransfer.clearData();
-    }
-  };
-
-  const handleFiles = (selectedFiles) => {
-    const csvFiles = selectedFiles.filter(
-      file => file.type === "text/csv" || file.name.endsWith(".csv")
-    );
-
-    if (csvFiles.length !== selectedFiles.length) {
-      setMessage({
-        type: "error",
-        text: "Only CSV files are allowed. Some files were not added."
-      });
-    }
-
-    const newFiles = [...files, ...csvFiles];
-    setFiles(newFiles);
-
-    // Reset previews for new files
-    csvFiles.forEach(file => {
-      Papa.parse(file, {
-        header: true,
-        dynamicTyping: true,
-        preview: 5,
-        complete: (results) => {
-          setPreviews(prevPreviews => [
-            ...prevPreviews,
-            {
-              filename: file.name,
-              data: results.data,
-              headers: results.meta.fields || []
-            }
-          ]);
-          setExpandedPreviews(prev => [...prev, false]);
-        },
-        error: (error) => {
-          setMessage({
-            type: "error",
-            text: `Error parsing file ${file.name}: ${error.message}`
-          });
-        }
-      });
+  
+  const handleConfigChange = (key, value) => {
+    setDataConfig({
+      ...dataConfig,
+      [key]: value
     });
   };
-
-  const handleFileChange = (e) => {
-    handleFiles(Array.from(e.target.files));
+  
+  const handleExport = (format) => {
+    // In a real implementation, this would call the Django backend to generate the file
+    alert(`Exporting data in ${format} format...`);
   };
-
-  const removeFile = (index) => {
-    setFiles(prevFiles => prevFiles.filter((_, i) => i !== index));
-    setPreviews(prevPreviews => prevPreviews.filter((_, i) => i !== index));
-    setExpandedPreviews(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const togglePreviewExpansion = (index) => {
-    setExpandedPreviews(prev => {
-      const newState = [...prev];
-      newState[index] = !newState[index];
-      return newState;
-    });
-  };
-
-  const clearAllFiles = () => {
-    setFiles([]);
-    setPreviews([]);
-    setExpandedPreviews([]);
-    setMessage(null);
-    setErrorDetails(null);
-    setMergedData(null);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (files.length < 2) {
-      setMessage({
-        type: "error",
-        text: "Please upload at least 2 CSV files to merge."
-      });
-      return;
-    }
-
-    setProcessing(true);
-    setMessage({
-      type: "info",
-      text: "Processing your CSV files. This might take a moment..."
-    });
-
-    const formData = new FormData();
-    files.forEach(file => {
-      formData.append('csv_files', file);
-    });
-
-    // Add settings to the request
-    Object.entries(settings).forEach(([key, value]) => {
-      formData.append(key, value);
-    });
-
-    try {
-      const response = await fetch('http://127.0.0.1:8000/api/merge-csv/', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        setMessage({
-          type: "success",
-          text: "CSV files successfully merged!"
-        });
-        setErrorDetails(null);
-
-        // Parse the merged CSV data
-        const text = await response.text();
-        const parsedData = Papa.parse(text, { header: true, dynamicTyping: true });
-        setMergedData(parsedData.data);
-
-        // Switch to the preview tab
-        setActiveTab("mergePreview");
-      } else {
-        const data = await response.json();
-        setMessage({
-          type: "error",
-          text: data.error || "Failed to merge CSV files."
-        });
-        setErrorDetails(data.details || null);
-      }
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: "An error occurred while processing your request."
-      });
-      console.error("Error:", error);
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  // Function to download sample CSV file
-  const downloadSampleCSV = () => {
-    const sampleData = [
-      { id: 1, name: "John Doe", email: "john@example.com" },
-      { id: 2, name: "Jane Smith", email: "jane@example.com" },
-      { id: 3, name: "Bob Johnson", email: "bob@example.com" }
-    ];
-
-    const csv = Papa.unparse(sampleData);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'sample.csv');
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
+  
   return (
-    <div className="min-h-screen py-8 bg-gradient-to-r from-black to-blue-900 text-white transition-colors duration-300"
-         onDragEnter={handleDragIn}
-         onDragLeave={handleDragOut}
-         onDragOver={handleDrag}
-         onDrop={handleDrop}>
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold">CSV Integrator Pro</h1>
-            <p className="mt-2 text-gray-400">
-              Advanced tool to merge, analyze and transform multiple CSV files
-            </p>
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <aside className="w-64 bg-gray-800 text-white">
+        <div className="p-4 flex items-center space-x-2">
+          <Database className="text-orange-500" size={24} />
+          <span className="text-xl font-bold">SynthGenie</span>
+        </div>
+        <nav className="mt-8">
+          <button 
+            onClick={() => setActiveTab('generator')} 
+            className={`w-full text-left px-4 py-3 flex items-center space-x-3 ${activeTab === 'generator' ? 'bg-orange-600' : 'hover:bg-gray-700'}`}>
+            <Database size={18} />
+            <span>Data Generator</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('preview')} 
+            className={`w-full text-left px-4 py-3 flex items-center space-x-3 ${activeTab === 'preview' ? 'bg-orange-600' : 'hover:bg-gray-700'}`}>
+            <FileType size={18} />
+            <span>Data Preview</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('validation')} 
+            className={`w-full text-left px-4 py-3 flex items-center space-x-3 ${activeTab === 'validation' ? 'bg-orange-600' : 'hover:bg-gray-700'}`}>
+            <CheckCircle size={18} />
+            <span>Validation</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('cleaning')} 
+            className={`w-full text-left px-4 py-3 flex items-center space-x-3 ${activeTab === 'cleaning' ? 'bg-orange-600' : 'hover:bg-gray-700'}`}>
+            <RefreshCw size={18} />
+            <span>Data Cleaning</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('export')} 
+            className={`w-full text-left px-4 py-3 flex items-center space-x-3 ${activeTab === 'export' ? 'bg-orange-600' : 'hover:bg-gray-700'}`}>
+            <Download size={18} />
+            <span>Export Data</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('settings')} 
+            className={`w-full text-left px-4 py-3 flex items-center space-x-3 ${activeTab === 'settings' ? 'bg-orange-600' : 'hover:bg-gray-700'}`}>
+            <Settings size={18} />
+            <span>Settings</span>
+          </button>
+        </nav>
+        <div className="mt-auto p-4 border-t border-gray-700">
+          <div className="flex items-center space-x-2">
+            <img src="/api/placeholder/32/32" alt="User" className="rounded-full" />
+            <div>
+              <p className="font-medium">Demo User</p>
+              <p className="text-xs text-gray-400">demo@synthgenie.com</p>
+            </div>
           </div>
         </div>
-
-        <div className="rounded-lg overflow-hidden mb-6 bg-gray-800 shadow-lg border border-gray-700">
-          <div className="border-b border-gray-700">
-            <nav className="flex">
-              <button
-                onClick={() => setActiveTab("upload")}
-                className={`px-6 py-4 text-sm font-medium ${
-                  activeTab === "upload"
-                    ? "border-b-2 border-blue-500 text-blue-400"
-                    : "text-gray-400 hover:text-gray-200"
-                }`}
-              >
-                <div className="flex items-center">
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload Files
+      </aside>
+      
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto p-6">
+        {/* Generator Tab */}
+        {activeTab === 'generator' && (
+          <div>
+            <h1 className="text-2xl font-bold mb-6">Generate Synthetic Data</h1>
+            
+            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+              <h2 className="text-lg font-semibold mb-4">Configure Data Generation</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Number of Rows</label>
+                  <input 
+                    type="number" 
+                    value={dataConfig.rows} 
+                    onChange={(e) => handleConfigChange('rows', parseInt(e.target.value) || 1)}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    min="1"
+                    max="1000"
+                  />
                 </div>
-              </button>
-              <button
-                onClick={() => setActiveTab("preview")}
-                className={`px-6 py-4 text-sm font-medium ${
-                  activeTab === "preview"
-                    ? "border-b-2 border-blue-500 text-blue-400"
-                    : "text-gray-400 hover:text-gray-200"
-                }`}
-                disabled={previews.length === 0}
-              >
-                <div className="flex items-center">
-                  <Table className="w-4 h-4 mr-2" />
-                  Data Preview
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveTab("stats")}
-                className={`px-6 py-4 text-sm font-medium ${
-                  activeTab === "stats"
-                    ? "border-b-2 border-blue-500 text-blue-400"
-                    : "text-gray-400 hover:text-gray-200"
-                }`}
-                disabled={previews.length === 0}
-              >
-                <div className="flex items-center">
-                  <BarChart className="w-4 h-4 mr-2" />
-                  Statistics
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveTab("mergePreview")}
-                className={`px-6 py-4 text-sm font-medium ${
-                  activeTab === "mergePreview"
-                    ? "border-b-2 border-blue-500 text-blue-400"
-                    : "text-gray-400 hover:text-gray-200"
-                }`}
-                disabled={!mergedData}
-              >
-                <div className="flex items-center">
-                  <Table className="w-4 h-4 mr-2" />
-                  Merge Preview
-                </div>
-              </button>
-            </nav>
-          </div>
-
-          <div className="p-6">
-            {activeTab === "upload" && (
-              <div>
-                <div
-                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                    isDragging
-                      ? "border-blue-500 bg-blue-900/20"
-                      : "border-gray-600 hover:border-blue-500"
-                  }`}
-                  onClick={() => fileInputRef.current.click()}
-                >
-                  <label className="flex flex-col items-center cursor-pointer">
-                    <Upload className={`w-16 h-16 mb-4 ${isDragging ? "text-blue-500" : "text-gray-400"}`} />
-                    <span className="text-xl font-medium">Upload CSV Files</span>
-                    <span className="text-sm text-gray-400 mt-2 max-w-md">
-                      Drag and drop your CSV files here or click to browse. Files should have a consistent structure for best results.
-                    </span>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      accept=".csv,text/csv"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-
-                <div className="mt-6 flex justify-between items-center">
-                  <button
-                    onClick={downloadSampleCSV}
-                    className="flex items-center text-sm text-blue-400 hover:underline"
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Export Format</label>
+                  <select 
+                    value={dataConfig.format}
+                    onChange={(e) => handleConfigChange('format', e.target.value)}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
                   >
-                    <Download className="w-4 h-4 mr-1" />
-                    Download Sample CSV
-                  </button>
-
-                  {files.length > 0 && (
-                    <button
-                      onClick={clearAllFiles}
-                      className="flex items-center text-sm text-red-400 hover:underline"
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Clear All Files
-                    </button>
-                  )}
+                    <option value="json">JSON</option>
+                    <option value="csv">CSV</option>
+                  </select>
                 </div>
-
-                {files.length > 0 && (
-                  <div className="mt-8">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-medium">
-                        Selected Files ({files.length})
-                      </h3>
-                    </div>
-
-                    <div className="space-y-2 max-h-80 overflow-y-auto rounded-lg border border-gray-600">
-                      {files.map((file, index) => (
-                        <div
-                          key={index}
-                          className={`flex items-center justify-between p-3 ${
-                            index % 2 === 0
-                              ? 'bg-gray-700'
-                              : 'bg-gray-800'
-                          }`}
-                        >
-                          <div className="flex items-center flex-grow">
-                            <FileText className="w-5 h-5 text-blue-500 mr-3 flex-shrink-0" />
-                            <div className="flex-grow">
-                              <div className="font-medium truncate max-w-xl">
-                                {file.name}
-                              </div>
-                              <div className="text-xs text-gray-400 mt-1">
-                                Size: {(file.size / 1024).toFixed(2)} KB |
-                                {previews[index] && ` Columns: ${previews[index].headers?.length || 0} | `}
-                                {previews[index] && ` Rows: ~${previews[index].data?.length || 0}+`}
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeFile(index)}
-                            className="ml-4 text-red-400 hover:text-red-200 p-1 rounded-full hover:bg-red-900/20"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
-            )}
-
-            {activeTab === "preview" && (
-              <div>
-                <h3 className="text-lg font-medium mb-4">
-                  Data Previews
-                </h3>
-
-                {previews.length === 0 ? (
-                  <div className="text-center py-10 text-gray-400">
-                    <Table className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No files uploaded yet. Please upload CSV files to see previews.</p>
-                  </div>
+              
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data Types to Include</label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {['names', 'emails', 'addresses', 'phone', 'dob', 'ssn', 'credit_card', 'company'].map(type => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        if (dataConfig.dataTypes.includes(type)) {
+                          handleConfigChange('dataTypes', dataConfig.dataTypes.filter(t => t !== type));
+                        } else {
+                          handleConfigChange('dataTypes', [...dataConfig.dataTypes, type]);
+                        }
+                      }}
+                      className={`px-3 py-1 rounded-full text-sm ${
+                        dataConfig.dataTypes.includes(type) 
+                          ? 'bg-orange-100 text-orange-700 border border-orange-300' 
+                          : 'bg-gray-100 text-gray-700 border border-gray-300'
+                      }`}
+                    >
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex space-x-4 mb-6">
+              <button 
+                onClick={handleGenerate}
+                disabled={isGenerating || dataConfig.dataTypes.length === 0}
+                className={`px-4 py-2 rounded-md flex items-center space-x-2 ${
+                  isGenerating || dataConfig.dataTypes.length === 0
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-orange-600 text-white hover:bg-orange-700'
+                }`}
+              >
+                {isGenerating ? (
+                  <>
+                    <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+                    <span>Generating...</span>
+                  </>
                 ) : (
-                  <div className="space-y-6">
-                    {previews.map((preview, index) => (
-                      <div key={index} className="bg-gray-800 shadow-lg border border-gray-700 rounded-lg overflow-hidden">
-                        <div
-                          className="flex justify-between items-center p-4 cursor-pointer hover:bg-gray-700/50"
-                          onClick={() => togglePreviewExpansion(index)}
-                        >
-                          <div className="flex items-center">
-                            {expandedPreviews[index] ? (
-                              <ChevronDown className="w-5 h-5 mr-2 text-gray-400" />
-                            ) : (
-                              <ChevronRight className="w-5 h-5 mr-2 text-gray-400" />
-                            )}
-                            <h4 className="font-medium">{preview.filename}</h4>
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {preview.data.length}+ rows | {preview.headers?.length || 0} columns
-                          </div>
-                        </div>
-
-                        {expandedPreviews[index] && (
-                          <div className="overflow-x-auto">
-                            <table className="min-w-full bg-gray-800">
-                              <thead>
-                                <tr className="bg-gray-700">
-                                  {preview.data.length > 0 && Object.keys(preview.data[0]).map((key, i) => (
-                                    <th key={i} className="py-2 px-4 border-b text-left text-xs font-medium uppercase tracking-wider">
-                                      {key}
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {preview.data.map((row, rowIndex) => (
-                                  <tr key={rowIndex} className={rowIndex % 2 === 0
-                                    ? "bg-gray-800"
-                                    : "bg-gray-700/50"
-                                  }>
-                                    {Object.values(row).map((value, colIndex) => (
-                                      <td key={colIndex} className="py-2 px-4 border-b text-sm">
-                                        {value === null || value === undefined ?
-                                          <span className="text-gray-400 italic">NULL</span> :
-                                          String(value)}
-                                      </td>
-                                    ))}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    <Database size={16} />
+                    <span>Generate Data</span>
+                  </>
                 )}
-              </div>
-            )}
-
-            {activeTab === "stats" && (
-              <div>
-                <h3 className="text-lg font-medium mb-6">
-                  File Statistics
-                </h3>
-
-                {Object.keys(statistics).length === 0 ? (
-                  <div className="text-center py-10 text-gray-400">
-                    <BarChart className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No file statistics available. Upload CSV files to view statistics.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {Object.entries(statistics).map(([filename, stats], index) => (
-                      <div key={index} className="bg-gray-800 shadow-lg border border-gray-700 rounded-lg p-5">
-                        <h4 className="font-medium mb-4 text-blue-400">{filename}</h4>
-                        <div className="space-y-3">
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-300">Rows:</span>
-                            <span className="text-sm font-medium">{stats.rowCount}+</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-300">Columns:</span>
-                            <span className="text-sm font-medium">{stats.columnCount}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-300">Size:</span>
-                            <span className="text-sm font-medium">{stats.size}</span>
-                          </div>
-                          <div className="mt-4">
-                            <span className="text-sm text-gray-300">Columns:</span>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {stats.columns.map((col, i) => (
-                                <span key={i} className={`text-xs px-2 py-1 rounded-full ${
-                                  matchColumns.includes(col)
-                                    ? "bg-green-900/30 text-green-300"
-                                    : "bg-gray-700 text-gray-300"
-                                }`}>
-                                  {col}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeTab === "mergePreview" && (
-              <div>
-                <h3 className="text-lg font-medium mb-4">Merged Data Preview</h3>
-                {mergedData ? (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full bg-gray-800">
-                      <thead>
-                        <tr className="bg-gray-700">
-                          {mergedData.length > 0 && Object.keys(mergedData[0]).map((key, i) => (
-                            <th key={i} className="py-2 px-4 border-b text-left text-xs font-medium uppercase tracking-wider">
-                              {key}
-                            </th>
+              </button>
+              
+              <button 
+                onClick={handleClearData}
+                disabled={generatedData.length === 0}
+                className={`px-4 py-2 rounded-md flex items-center space-x-2 ${
+                  generatedData.length === 0
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-red-600 text-white hover:bg-red-700'
+                }`}
+              >
+                <Trash2 size={16} />
+                <span>Clear Data</span>
+              </button>
+            </div>
+            
+            {generatedData.length > 0 && (
+              <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+                  <h3 className="font-medium">Generated Data Preview</h3>
+                  <span className="text-sm text-gray-500">{generatedData.length} rows</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {Object.keys(generatedData[0]).map(key => (
+                          <th key={key} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {key}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {generatedData.slice(0, 5).map((row, i) => (
+                        <tr key={i}>
+                          {Object.values(row).map((value, j) => (
+                            <td key={j} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {value}
+                            </td>
                           ))}
                         </tr>
-                      </thead>
-                      <tbody>
-                        {mergedData.map((row, rowIndex) => (
-                          <tr key={rowIndex} className={rowIndex % 2 === 0
-                            ? "bg-gray-800"
-                            : "bg-gray-700/50"
-                          }>
-                            {Object.values(row).map((value, colIndex) => (
-                              <td key={colIndex} className="py-2 px-4 border-b text-sm">
-                                {value === null || value === undefined ?
-                                  <span className="text-gray-400 italic">NULL</span> :
-                                  String(value)}
-                              </td>
-                            ))}
-                          </tr>
+                      ))}
+                      {generatedData.length > 5 && (
+                        <tr>
+                          <td colSpan={Object.keys(generatedData[0]).length} className="px-6 py-4 text-center text-sm text-gray-500">
+                            ... and {generatedData.length - 5} more rows
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Preview Tab */}
+        {activeTab === 'preview' && (
+          <div>
+            <h1 className="text-2xl font-bold mb-6">Data Preview</h1>
+            
+            {generatedData.length > 0 ? (
+              <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {Object.keys(generatedData[0]).map(key => (
+                          <th key={key} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {key}
+                          </th>
                         ))}
-                      </tbody>
-                    </table>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {generatedData.map((row, i) => (
+                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          {Object.values(row).map((value, j) => (
+                            <td key={j} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {value}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                <Database size={48} className="mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-700 mb-2">No Data Generated Yet</h3>
+                <p className="text-gray-500 mb-4">Go to the Data Generator tab to create some synthetic data.</p>
+                <button 
+                  onClick={() => setActiveTab('generator')}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
+                >
+                  Generate Data
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Validation Tab */}
+        {activeTab === 'validation' && (
+          <div>
+            <h1 className="text-2xl font-bold mb-6">Data Validation</h1>
+            
+            {generatedData.length > 0 ? (
+              <div className="space-y-6">
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <h2 className="text-lg font-semibold mb-4">Validation Results</h2>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="flex items-center">
+                        <CheckCircle size={20} className="text-green-500 mr-2" />
+                        <span className="font-medium text-green-700">Valid Records</span>
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{generatedData.length}</p>
+                    </div>
+                    
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <div className="flex items-center">
+                        <AlertCircle size={20} className="text-yellow-500 mr-2" />
+                        <span className="font-medium text-yellow-700">Warnings</span>
+                      </div>
+                      <p className="text-2xl font-bold mt-2">0</p>
+                    </div>
+                    
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="flex items-center">
+                        <X size={20} className="text-red-500 mr-2" />
+                        <span className="font-medium text-red-700">Errors</span>
+                      </div>
+                      <p className="text-2xl font-bold mt-2">0</p>
+                    </div>
                   </div>
-                ) : (
-                  <div className="text-center py-10 text-gray-400">
-                    <Table className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No merged data available. Merge CSV files to see the preview.</p>
+                  
+                  <div className="border-t border-gray-200 pt-4">
+                    <h3 className="font-medium mb-2">Data Quality Checks</h3>
+                    <ul className="space-y-2">
+                      <li className="flex items-center text-green-700">
+                        <CheckCircle size={16} className="mr-2" />
+                        <span>No duplicate records found</span>
+                      </li>
+                      <li className="flex items-center text-green-700">
+                        <CheckCircle size={16} className="mr-2" />
+                        <span>All required fields are present</span>
+                      </li>
+                      <li className="flex items-center text-green-700">
+                        <CheckCircle size={16} className="mr-2" />
+                        <span>Email formats are valid</span>
+                      </li>
+                      <li className="flex items-center text-green-700">
+                        <CheckCircle size={16} className="mr-2" />
+                        <span>Phone number formats are valid</span>
+                      </li>
+                    </ul>
                   </div>
-                )}
-                {mergedData && (
-                  <div className="mt-6 flex justify-end">
-                    <button
-                      onClick={() => {
-                        const csv = Papa.unparse(mergedData);
-                        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                        const url = URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.setAttribute('href', url);
-                        link.setAttribute('download', 'merged_csv.csv');
-                        link.style.visibility = 'hidden';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      }}
-                      className="px-6 py-2 rounded-md bg-green-600 text-white hover:bg-green-700"
-                    >
-                      Download Merged CSV
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                <AlertCircle size={48} className="mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-700 mb-2">No Data to Validate</h3>
+                <p className="text-gray-500 mb-4">Generate data first to run validation checks.</p>
+                <button 
+                  onClick={() => setActiveTab('generator')}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
+                >
+                  Generate Data
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Cleaning Tab */}
+        {activeTab === 'cleaning' && (
+          <div>
+            <h1 className="text-2xl font-bold mb-6">Data Cleaning & Corrections</h1>
+            
+            {generatedData.length > 0 ? (
+              <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                <div className="p-4 border-b border-gray-200">
+                  <h2 className="font-medium">Edit Data</h2>
+                  <p className="text-sm text-gray-500 mt-1">Make manual corrections to your generated data.</p>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {Object.keys(generatedData[0]).map(key => (
+                          <th key={key} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {key}
+                          </th>
+                        ))}
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {generatedData.map((row, i) => (
+                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          {Object.values(row).map((value, j) => (
+                            <td key={j} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {value}
+                            </td>
+                          ))}
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button className="text-orange-600 hover:text-orange-800">
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+                  <div>
+                    <button className="px-3 py-1 bg-orange-600 text-white rounded-md hover:bg-orange-700 flex items-center space-x-1">
+                      <PlusCircle size={16} />
+                      <span>Add Row</span>
                     </button>
                   </div>
-                )}
-              </div>
-            )}
-
-            {message && (
-              <div
-                className={`p-4 mt-6 rounded-md ${
-                  message.type === "success"
-                    ? "bg-green-900/20 text-green-300"
-                    : message.type === "error"
-                    ? "bg-red-900/20 text-red-300"
-                    : "bg-blue-900/20 text-blue-300"
-                }`}
-              >
-                <div className="flex items-center">
-                  {message.type === "success" ? (
-                    <Check className="w-5 h-5 mr-2" />
-                  ) : message.type === "error" ? (
-                    <X className="w-5 h-5 mr-2" />
-                  ) : (
-                    <AlertCircle className="w-5 h-5 mr-2" />
-                  )}
-                  <p>{message.text}</p>
-                </div>
-                {errorDetails && (
-                  <div className="mt-2 text-sm">
-                    <p className="font-semibold">Details:</p>
-                    <p>{errorDetails}</p>
+                  <div>
+                    <button className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700">
+                      Save Changes
+                    </button>
                   </div>
-                )}
+                </div>
+                </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                <RefreshCw size={48} className="mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-700 mb-2">No Data to Clean</h3>
+                <p className="text-gray-500 mb-4">Generate data first to make corrections or edits.</p>
+                <button 
+                  onClick={() => setActiveTab('generator')}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
+                >
+                  Generate Data
+                </button>
               </div>
             )}
           </div>
-
-          <div className="p-4 border-t border-gray-700 flex justify-between items-center">
-            <div className="text-sm text-gray-400">
-              {files.length === 0 ?
-                "Upload at least 2 CSV files to merge them." :
-                `${files.length} file${files.length !== 1 ? 's' : ''} selected for merging.`
-              }
-            </div>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={files.length < 2 || processing}
-              className={`px-6 py-2 rounded-md text-white font-medium ${
-                files.length < 2 || processing
-                  ? "bg-gray-600 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700"
-              }`}
-            >
-              {processing ? (
-                <span className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Processing...
-                </span>
-              ) : (
-                "Merge Files"
-              )}
-            </button>
+        )}
+        
+        {/* Export Tab */}
+        {activeTab === 'export' && (
+          <div>
+            <h1 className="text-2xl font-bold mb-6">Export Your Data</h1>
+            
+            {generatedData.length > 0 ? (
+              <div className="space-y-6">
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <h2 className="text-lg font-semibold mb-4">Export Options</h2>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="border border-gray-200 rounded-lg p-6 hover:border-orange-300 hover:shadow-md transition-all">
+                      <div className="flex items-center mb-4">
+                        <div className="bg-orange-100 p-3 rounded-lg mr-4">
+                          <Download size={24} className="text-orange-600" />
+                        </div>
+                        <h3 className="text-lg font-medium">JSON Format</h3>
+                      </div>
+                      <p className="text-gray-500 mb-4">Export your data as a JSON file for easy integration with JavaScript applications.</p>
+                      <button 
+                        onClick={() => handleExport('json')}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 w-full"
+                      >
+                        Export as JSON
+                      </button>
+                    </div>
+                    
+                    <div className="border border-gray-200 rounded-lg p-6 hover:border-orange-300 hover:shadow-md transition-all">
+                      <div className="flex items-center mb-4">
+                        <div className="bg-orange-100 p-3 rounded-lg mr-4">
+                          <Download size={24} className="text-orange-600" />
+                        </div>
+                        <h3 className="text-lg font-medium">CSV Format</h3>
+                      </div>
+                      <p className="text-gray-500 mb-4">Export your data as a CSV file for easy use with spreadsheet applications.</p>
+                      <button 
+                        onClick={() => handleExport('csv')}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 w-full"
+                      >
+                        Export as CSV
+                      </button>
+                    </div>
+                    
+                    <div className="border border-gray-200 rounded-lg p-6 hover:border-orange-300 hover:shadow-md transition-all">
+                      <div className="flex items-center mb-4">
+                        <div className="bg-orange-100 p-3 rounded-lg mr-4">
+                          <Download size={24} className="text-orange-600" />
+                        </div>
+                        <h3 className="text-lg font-medium">SQL Format</h3>
+                      </div>
+                      <p className="text-gray-500 mb-4">Export your data as SQL INSERT statements for database integration.</p>
+                      <button 
+                        onClick={() => handleExport('sql')}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 w-full"
+                      >
+                        Export as SQL
+                      </button>
+                    </div>
+                    
+                    <div className="border border-gray-200 rounded-lg p-6 hover:border-orange-300 hover:shadow-md transition-all">
+                      <div className="flex items-center mb-4">
+                        <div className="bg-orange-100 p-3 rounded-lg mr-4">
+                          <Download size={24} className="text-orange-600" />
+                        </div>
+                        <h3 className="text-lg font-medium">Excel Format</h3>
+                      </div>
+                      <p className="text-gray-500 mb-4">Export your data as an Excel spreadsheet for advanced analysis.</p>
+                      <button 
+                        onClick={() => handleExport('excel')}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 w-full"
+                      >
+                        Export as Excel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <div className="bg-blue-100 p-2 rounded-full mr-3">
+                      <AlertCircle size={18} className="text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-blue-800 mb-1">Data Privacy Note</h3>
+                      <p className="text-blue-700 text-sm">
+                        Remember that even synthetic data may need to comply with relevant data protection regulations in your region.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                <Download size={48} className="mx-auto text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-700 mb-2">No Data to Export</h3>
+                <p className="text-gray-500 mb-4">Generate data first to export it in various formats.</p>
+                <button 
+                  onClick={() => setActiveTab('generator')}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
+                >
+                  Generate Data
+                </button>
+              </div>
+            )}
           </div>
-        </div>
-
-        <div className="text-center text-sm text-gray-400 mt-6">
-          <p>CSV Integrator Pro v1.0.0 | An advanced tool for CSV operations</p>
-        </div>
-      </div>
+        )}
+        
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <div>
+            <h1 className="text-2xl font-bold mb-6">Settings</h1>
+            
+            <div className="bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="font-medium">Application Settings</h2>
+                <p className="text-sm text-gray-500 mt-1">Configure your SynthGenie preferences.</p>
+              </div>
+              
+              <div className="p-6 space-y-6">
+                <div>
+                  <h3 className="text-md font-medium mb-3">General Settings</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">Dark Mode</p>
+                        <p className="text-sm text-gray-500">Switch between light and dark themes</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" value="" className="sr-only peer" />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                      </label>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">Notifications</p>
+                        <p className="text-sm text-gray-500">Receive alerts when operations complete</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" value="" className="sr-only peer" checked />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="border-t border-gray-200 pt-6">
+                  <h3 className="text-md font-medium mb-3">Data Generation Settings</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Default Format</label>
+                      <select className="w-full border border-gray-300 rounded-md px-3 py-2">
+                        <option value="json">JSON</option>
+                        <option value="csv">CSV</option>
+                        <option value="sql">SQL</option>
+                        <option value="excel">Excel</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Default Row Count</label>
+                      <input 
+                        type="number" 
+                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                        defaultValue="100"
+                        min="1"
+                        max="10000"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Locale Settings</label>
+                      <select className="w-full border border-gray-300 rounded-md px-3 py-2">
+                        <option value="en-US">English (United States)</option>
+                        <option value="en-GB">English (United Kingdom)</option>
+                        <option value="fr-FR">French (France)</option>
+                        <option value="de-DE">German (Germany)</option>
+                        <option value="es-ES">Spanish (Spain)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="border-t border-gray-200 pt-6">
+                  <h3 className="text-md font-medium mb-3">API Settings</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                      <div className="relative">
+                        <input 
+                          type="password" 
+                          className="w-full border border-gray-300 rounded-md px-3 py-2"
+                          value="••••••••••••••••••••••••••••••"
+                          readOnly
+                        />
+                        <button className="absolute right-2 top-2 text-orange-600 hover:text-orange-800">
+                          Show
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Used for programmatic access to your data</p>
+                    </div>
+                    
+                    <div>
+                      <button className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700">
+                        Regenerate API Key
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+                <button className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700">
+                  Save Settings
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
-};
-
-export default CSVIntegrator;
+}
