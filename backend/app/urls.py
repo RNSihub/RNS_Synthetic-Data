@@ -1,10 +1,9 @@
 from django.urls import path
-from .views import *
-from .syn import *
+from . import views
 
 urlpatterns = [
-    path('api/merge-csv/', merge_csv, name='merge_csv'),
-    path('api/generate-preview/', generate_preview, name='generate_preview'),
-    path('api/generate-data/', generate_data, name='generate_data'),
-    path('api/export-data/<str:data_id>/', export_data, name='export_data'),
+    path('api/preview-file/', views.preview_file, name='preview_file'),
+    path('api/get-table-columns/', views.get_table_columns, name='get_table_columns'),
+    path('api/column-recommendations/', views.column_recommendations, name='column_recommendations'),
+    path('api/generate-data/', views.generate_data, name='generate_data'),
 ]

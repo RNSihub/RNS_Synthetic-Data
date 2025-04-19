@@ -1,421 +1,669 @@
+import json
 import os
 import pandas as pd
-import uuid
-import json
-import re
-import io
-import logging
-import requests
-from django.http import JsonResponse, HttpResponse
+import numpy as np
+from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.conf import settings
+from django.db import connection
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+import uuid
+import re
+from datetime import datetime
 
-# Configure logging
-logger = logging.getLogger(__name__)
+# Configure Gemini API
+API_KEY = "AIzaSyB8gETGUcZwHqUmF1dJIm_MYbeWjWBup3M"
+genai.configure(api_key=API_KEY)
 
-# Gemini API key and URL
-GEMINI_API_KEY = "AIzaSyB8gETGUcZwHqUmF1dJIm_MYbeWjWBup3M"
-GEMINI_API_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+# Safety settings to ensure appropriate content generation
+safety_settings = {
+    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+}
+
+# Initialize the model
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-pro",
+    safety_settings=safety_settings,
+    generation_config={"temperature": 0.7, "max_output_tokens": 8192}
 )
+
 @csrf_exempt
-def merge_csv(request):
-    """
-    API view for merging multiple CSV files.
-    Handles file upload, parsing, merging, cleaning with Gemini API insights,
-    and provides a downloadable result.
-    """
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Only POST requests are allowed'}, status=405)
+def preview_file(request):
+    """Process uploaded file and return preview data"""
+    if request.method == 'POST':
+        file = request.FILES.get('file')
+        if not file:
+            return JsonResponse({'error': 'No file provided'}, status=400)
 
-    # Check if files are provided
-    if 'csv_files' not in request.FILES:
-        return JsonResponse({'error': 'No files were uploaded'}, status=400)
-
-    files = request.FILES.getlist('csv_files')
-
-    # Ensure we have at least 2 files
-    if len(files) < 2:
-        return JsonResponse({'error': 'Please upload at least 2 CSV files to merge'}, status=400)
-
-    try:
-        # Extract settings from the request
-        merge_type = request.POST.get('mergeType', 'inner')
-        column_match = request.POST.get('columnMatch', 'auto')
-        match_column = request.POST.get('matchColumn', '')
-        remove_empty_rows = request.POST.get('removeEmptyRows', 'true').lower() == 'true'
-        trim_whitespace = request.POST.get('trimWhitespace', 'true').lower() == 'true'
-        case_insensitive = request.POST.get('caseInsensitiveMatch', 'true').lower() == 'true'
-
-        # Read all CSV files into pandas DataFrames
-        dataframes = []
-        file_names = []
-
-        for file in files:
-            try:
+        try:
+            # Determine file type and read
+            if file.name.endswith('.csv'):
                 df = pd.read_csv(file)
+            elif file.name.endswith('.xlsx') or file.name.endswith('.xls'):
+                df = pd.read_excel(file)
+            else:
+                return JsonResponse({'error': 'Unsupported file format'}, status=400)
 
-                # Apply initial cleaning based on settings
-                if trim_whitespace:
-                    for col in df.select_dtypes(include=['object']).columns:
-                        df[col] = df[col].str.strip() if isinstance(df[col], pd.Series) else df[col]
+            # Get column info
+            column_info = []
+            for col in df.columns:
+                column_type = str(df[col].dtype)
+                if column_type == 'object':
+                    column_type = 'string'
+                elif 'int' in column_type:
+                    column_type = 'integer'
+                elif 'float' in column_type:
+                    column_type = 'float'
+                elif 'date' in column_type:
+                    column_type = 'date'
+                elif 'bool' in column_type:
+                    column_type = 'boolean'
 
-                if case_insensitive and column_match == 'specific' and match_column:
-                    if match_column in df.columns and df[match_column].dtype == 'object':
-                        df[match_column] = df[match_column].str.lower() if isinstance(df[match_column], pd.Series) else df[match_column]
+                column_info.append({
+                    'name': col,
+                    'type': column_type,
+                    'description': f'Data column: {col}'
+                })
 
-                # Normalize 'Age' column if present
-                if 'Age' in df.columns:
-                    try:
-                        # Convert 'Age' to numeric, coercing errors to NaN
-                        df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
-                        # Optionally fill NaN with a default value (e.g., mean or 0)
-                        if df['Age'].isna().any():
-                            df['Age'] = df['Age'].fillna(df['Age'].mean() if not df['Age'].isna().all() else 0)
-                        # Ensure int64 type
-                        df['Age'] = df['Age'].astype('int64')
-                    except Exception as e:
-                        logger.warning(f"Error normalizing 'Age' in file {file.name}: {str(e)}")
-                        return JsonResponse({
-                            'error': f"Invalid data in 'Age' column of file {file.name}",
-                            'details': str(e)
-                        }, status=400)
+            # Create preview of data
+            preview_data = df.head(5).to_dict('records')
 
-                dataframes.append(df)
-                file_names.append(file.name)
-            except Exception as e:
-                return JsonResponse({
-                    'error': f'Error parsing file {file.name}',
-                    'details': str(e)
-                }, status=400)
-
-        # Check that all DataFrames have data
-        if any(df.empty for df in dataframes):
             return JsonResponse({
-                'error': 'One or more CSV files are empty',
-                'details': 'Please ensure all uploaded files contain data'
-            }, status=400)
+                'columns': column_info,
+                'preview': preview_data,
+                'row_count': len(df)
+            })
 
-        # Collect a sample of data for Gemini API
-        sample_data = []
-        for df in dataframes:
-            if not df.empty:
-                sample_data.extend(df.head(3).to_dict('records'))
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
 
-        # Get column metadata
-        all_columns = set()
-        for df in dataframes:
-            all_columns.update(df.columns)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
-        # Get insights from Gemini API
-        gemini_insights = get_gemini_insights(sample_data, list(all_columns))
+@csrf_exempt
+def get_table_columns(request):
+    """Get columns from database table"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            table_name = data.get('table_name')
+            
+            if not table_name:
+                return JsonResponse({'error': 'Table name is required'}, status=400)
+            
+            # Sanitize table name to prevent SQL injection
+            if not re.match(r'^[a-zA-Z0-9_]+$', table_name):
+                return JsonResponse({'error': 'Invalid table name'}, status=400)
+            
+            # Get column information from the database
+            with connection.cursor() as cursor:
+                # Check if table exists
+                cursor.execute(f"""
+                    SELECT COUNT(*) 
+                    FROM information_schema.tables 
+                    WHERE table_name = %s
+                """, [table_name])
+                if cursor.fetchone()[0] == 0:
+                    return JsonResponse({'error': f'Table {table_name} does not exist'}, status=404)
+                
+                # Get column information
+                cursor.execute(f"""
+                    SELECT column_name, data_type 
+                    FROM information_schema.columns 
+                    WHERE table_name = %s
+                """, [table_name])
+                columns = cursor.fetchall()
+                
+                # Get sample data for better description
+                cursor.execute(f"SELECT * FROM {table_name} LIMIT 5")
+                sample_rows = cursor.fetchall()
+                column_names = [desc[0] for desc in cursor.description]
+                
+            column_info = []
+            for col_name, data_type in columns:
+                # Map database types to simplified types
+                mapped_type = 'string'
+                if 'int' in data_type or 'serial' in data_type:
+                    mapped_type = 'integer'
+                elif 'float' in data_type or 'double' in data_type or 'numeric' in data_type:
+                    mapped_type = 'float'
+                elif 'date' in data_type or 'time' in data_type:
+                    mapped_type = 'date'
+                elif 'bool' in data_type:
+                    mapped_type = 'boolean'
+                
+                column_info.append({
+                    'name': col_name,
+                    'type': mapped_type,
+                    'description': f'Database column: {col_name} ({data_type})'
+                })
+            
+            # Generate sample data for recommendations
+            sample_data = []
+            for row in sample_rows:
+                sample_row = {}
+                for i, col in enumerate(column_names):
+                    sample_row[col] = row[i]
+                sample_data.append(sample_row)
+            
+            # Generate recommendations based on table structure
+            recommendations = generate_column_recommendations_for_table(table_name, column_info, sample_data)
+            
+            return JsonResponse({
+                'columns': column_info,
+                'recommendations': recommendations
+            })
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
-        # Perform the merge operation
-        if merge_type == 'concat':
-            # Use pd.concat for vertical stacking
-            merged_df = pd.concat(dataframes, ignore_index=True)
-        else:
-            # For merge operations
-            if column_match == 'specific' and match_column:
-                if not all(match_column in df.columns for df in dataframes):
-                    return JsonResponse({
-                        'error': f'Match column "{match_column}" not found in all files',
-                        'details': 'Please select a column that exists in all CSV files'
-                    }, status=400)
+@csrf_exempt
+def column_recommendations(request):
+    """Generate additional column recommendations based on existing columns"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            columns = data.get('columns', [])
+            sample_data = data.get('sample_data', [])
+            
+            if not columns:
+                return JsonResponse({'error': 'No columns provided'}, status=400)
+            
+            recommendations = generate_column_recommendations(columns, sample_data)
+            
+            return JsonResponse({
+                'recommendations': recommendations
+            })
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
-                # Start with the first DataFrame
-                merged_df = dataframes[0]
+@csrf_exempt
+def generate_data(request):
+    """Generate synthetic data using Gemini API"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            columns = data.get('columns', [])
+            row_count = data.get('row_count', 0)
+            input_method = data.get('input_method')
+            table_name = data.get('table_name')
+            original_row_count = data.get('original_row_count', 0)
+            
+            if not columns:
+                return JsonResponse({'error': 'No columns provided'}, status=400)
+            
+            if row_count <= 0 or row_count > 1000:  # Maximum limit based on API constraints
+                return JsonResponse({'error': 'Invalid row count (must be between 1 and 1000)'}, status=400)
+            
+            # Generate synthetic data
+            synthetic_data = generate_synthetic_data(columns, row_count, input_method, table_name, original_row_count)
+            
+            return JsonResponse({
+                'generated_data': synthetic_data
+            })
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
-                # Merge with each remaining DataFrame
-                for i in range(1, len(dataframes)):
-                    try:
-                        merged_df = pd.merge(
-                            merged_df,
-                            dataframes[i],
-                            on=match_column,
-                            how=merge_type
-                        )
-                    except Exception as e:
-                        logger.error(f"Error merging on column {match_column}: {str(e)}")
-                        return JsonResponse({
-                            'error': f'Failed to merge on column "{match_column}"',
-                            'details': str(e)
-                        }, status=400)
-            else:
-                # Auto-match based on common columns
-                columns_sets = [set(df.columns) for df in dataframes]
-                common_columns = set.intersection(*columns_sets)
-
-                if not common_columns:
-                    return JsonResponse({
-                        'error': 'CSV files have no common columns',
-                        'details': 'The uploaded files must share at least one column name for merging'
-                    }, status=400)
-
-                # Normalize data types for common columns (especially 'Age')
-                for col in common_columns:
-                    if col == 'Age':
-                        # Already normalized above
-                        continue
-                    for df in dataframes:
-                        try:
-                            if df[col].dtype == 'object':
-                                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(df[col])
-                        except:
-                            pass  # Skip if conversion fails
-
-                # Start with the first DataFrame
-                merged_df = dataframes[0]
-
-                # Merge with each remaining DataFrame
-                for i in range(1, len(dataframes)):
-                    try:
-                        merged_df = pd.merge(
-                            merged_df,
-                            dataframes[i],
-                            on=list(common_columns),
-                            how=merge_type
-                        )
-                    except Exception as e:
-                        logger.error(f"Error merging on columns {common_columns}: {str(e)}")
-                        return JsonResponse({
-                            'error': f'Failed to merge on common columns',
-                            'details': str(e)
-                        }, status=400)
-
-        # Clean the merged DataFrame
-        cleaning_stats = clean_data(merged_df, gemini_insights)
-
-        # Remove empty rows if requested
-        if remove_empty_rows:
-            initial_rows = len(merged_df)
-            merged_df.dropna(how='all', inplace=True)
-            cleaning_stats['empty_rows_removed'] = initial_rows - len(merged_df)
-
-        # Remove duplicates
-        total_rows = len(merged_df)
-        merged_df.drop_duplicates(inplace=True)
-        duplicates_removed = total_rows - len(merged_df)
-        cleaning_stats['duplicates_removed'] = duplicates_removed
-
-        # Create a unique filename
-        unique_id = str(uuid.uuid4())
-        output_filename = f"merged_csv_{unique_id}.csv"
-
-        # Save to CSV buffer
-        csv_buffer = io.StringIO()
-        merged_df.to_csv(csv_buffer, index=False)
-        csv_content = csv_buffer.getvalue()
-
-        # Create response
-        response = HttpResponse(csv_content, content_type='text/csv')
-        response['Content-Disposition'] = f'attachment; filename="{output_filename}"'
-
-        # Add metadata
-        response['X-Processing-Stats'] = json.dumps({
-            'input_files': len(files),
-            'input_files_names': file_names,
-            'output_rows': len(merged_df),
-            'output_columns': len(merged_df.columns),
-            'cleaning_stats': cleaning_stats,
-            'merge_type': merge_type
+def generate_column_recommendations(columns, sample_data):
+    """Generate recommendations for additional columns based on existing columns and sample data"""
+    # Extract column names and types
+    column_names = [col['name'] for col in columns]
+    column_types = {col['name']: col['type'] for col in columns}
+    
+    # Define common column recommendations based on patterns
+    recommendations = []
+    
+    # Check for name-related columns
+    name_columns = [col for col in column_names if 'name' in col.lower()]
+    if any('first' in col.lower() for col in name_columns) and not any('last' in col.lower() for col in name_columns):
+        recommendations.append({
+            'name': 'last_name',
+            'type': 'string',
+            'description': 'Last name of the person'
         })
-
-        return response
-
-    except Exception as e:
-        logger.exception(f"Error in merge_csv: {str(e)}")
-        return JsonResponse({
-            'error': 'An error occurred during processing',
-            'details': str(e)
-        }, status=500)
-
-def clean_data(df, gemini_insights=None):
-    """
-    Clean the DataFrame by handling missing values and applying transformations
-    based on Gemini API insights.
-    """
-    if df is None or df.empty:
-        return {'missing_values': 0, 'cleaned_columns': []}
-
-    # Initial stats
-    missing_values_count = df.isna().sum().sum()
-    cleaned_columns = []
-
-    # Apply Gemini insights
-    if gemini_insights and 'transformations' in gemini_insights:
-        for transform in gemini_insights['transformations']:
-            column = transform.get('column')
-            action = transform.get('action')
-
-            if column and action and column in df.columns:
-                try:
-                    missing_before = df[column].isna().sum()
-
-                    if action == 'fill_mean' and pd.api.types.is_numeric_dtype(df[column]):
-                        if not df[column].empty and not df[column].isna().all():
-                            df[column].fillna(df[column].mean(), inplace=True)
-                            cleaned_columns.append(column)
-                    elif action == 'fill_median' and pd.api.types.is_numeric_dtype(df[column]):
-                        if not df[column].empty and not df[column].isna().all():
-                            df[column].fillna(df[column].median(), inplace=True)
-                            cleaned_columns.append(column)
-                    elif action == 'fill_mode':
-                        if not df[column].empty and not df[column].mode().empty:
-                            df[column].fillna(df[column].mode()[0], inplace=True)
-                            cleaned_columns.append(column)
-                        else:
-                            df[column].fillna("", inplace=True)
-                            cleaned_columns.append(column)
-                    elif action == 'fill_zero' and pd.api.types.is_numeric_dtype(df[column]):
-                        df[column].fillna(0, inplace=True)
-                        cleaned_columns.append(column)
-                    elif action == 'fill_empty':
-                        df[column].fillna("", inplace=True)
-                        cleaned_columns.append(column)
-
-                    missing_after = df[column].isna().sum()
-                    if missing_before > missing_after:
-                        logger.info(f"Cleaned column {column} using {action}: filled {missing_before - missing_after} values")
-
-                except Exception as e:
-                    logger.warning(f"Error applying transformation to column {column}: {str(e)}")
-                    continue
-
-    # Standard cleaning
-    try:
-        for column in df.select_dtypes(include=['number']).columns:
-            if df[column].isna().any() and column not in cleaned_columns:
-                missing_before = df[column].isna().sum()
-                if not df[column].empty and not df[column].isna().all():
-                    df[column].fillna(df[column].mean(), inplace=True)
-                else:
-                    df[column].fillna(0, inplace=True)
-                cleaned_columns.append(column)
-                missing_after = df[column].isna().sum()
-                logger.info(f"Cleaned numeric column {column}: filled {missing_before - missing_after} values")
-    except Exception as e:
-        logger.warning(f"Error cleaning numeric columns: {str(e)}")
-
-    try:
-        for column in df.select_dtypes(exclude=['number']).columns:
-            if df[column].isna().any() and column not in cleaned_columns:
-                missing_before = df[column].isna().sum()
-                if not df[column].empty and not df[column].mode().empty:
-                    df[column].fillna(df[column].mode()[0], inplace=True)
-                else:
-                    df[column].fillna("", inplace=True)
-                cleaned_columns.append(column)
-                missing_after = df[column].isna().sum()
-                logger.info(f"Cleaned non-numeric column {column}: filled {missing_before - missing_after} values")
-    except Exception as e:
-        logger.warning(f"Error cleaning non-numeric columns: {str(e)}")
-
-    # Final stats
-    final_missing = df.isna().sum().sum()
-    values_filled = missing_values_count - final_missing
-
-    return {
-        'initial_missing_values': int(missing_values_count),
-        'values_filled': int(values_filled),
-        'remaining_missing': int(final_missing),
-        'cleaned_columns': cleaned_columns
-    }
-
-def get_gemini_insights(data_sample, columns):
-    """
-    Use Gemini API to get insights and cleaning suggestions.
-    """
-    try:
-        headers = {"Content-Type": "application/json"}
-
-        max_sample_size = 10
-        if len(data_sample) > max_sample_size:
-            data_sample = data_sample[:max_sample_size]
-
-        # Sanitize data
-        safe_data = []
-        for row in data_sample:
-            safe_row = {}
-            for k, v in row.items():
-                if pd.isna(v):
-                    safe_row[k] = None
-                elif isinstance(v, (str, int, float, bool, type(None))):
-                    safe_row[k] = v
-                else:
-                    safe_row[k] = str(v)
-            safe_data.append(safe_row)
-
-        # Determine column types
-        column_types = {}
-        for column in columns:
-            column_values = [row.get(column) for row in safe_data if column in row]
-            column_values = [v for v in column_values if v is not None]
-            if not column_values:
-                column_types[column] = "unknown"
-            elif all(isinstance(v, (int, float)) for v in column_values):
-                column_types[column] = "numeric"
-            else:
-                column_types[column] = "text/categorical"
-
-        column_type_info = "\n".join([f"- {col}: {typ}" for col, typ in column_types.items()])
-
-        prompt = f"""
-        I need to clean and merge CSV files with the following columns: {', '.join(columns)}
-
-        Column types I've detected:
-        {column_type_info}
-
-        Here's a sample of the data (showing up to {len(safe_data)} rows):
-        {json.dumps(safe_data, indent=2)}
-
-        As a data cleaning expert, please analyze this data and provide recommendations for:
-        1. How to handle missing values in each column
-        2. What transformations would improve data quality
-        3. How to handle duplicates
-
-        Format your response as JSON:
-        {{
-            "analysis": "brief description of data issues",
-            "transformations": [
-                {{"column": "column_name", "action": "fill_mean|fill_median|fill_mode|fill_zero|fill_empty", "reason": "explanation"}}
+    elif any('last' in col.lower() for col in name_columns) and not any('first' in col.lower() for col in name_columns):
+        recommendations.append({
+            'name': 'first_name',
+            'type': 'string',
+            'description': 'First name of the person'
+        })
+    elif not any(col.lower() in ['name', 'full_name', 'first_name', 'last_name'] for col in column_names):
+        if any(col.lower() in ['user_id', 'customer_id', 'employee_id'] for col in column_names):
+            recommendations.append({
+                'name': 'full_name',
+                'type': 'string',
+                'description': 'Full name of the person'
+            })
+    
+    # Check for address-related columns
+    address_columns = [col for col in column_names if any(addr in col.lower() for addr in ['address', 'street', 'city', 'state', 'zip', 'postal'])]
+    if address_columns:
+        if not any('city' in col.lower() for col in column_names):
+            recommendations.append({
+                'name': 'city',
+                'type': 'string',
+                'description': 'City name'
+            })
+        if not any('state' in col.lower() for col in column_names):
+            recommendations.append({
+                'name': 'state',
+                'type': 'string',
+                'description': 'State or province'
+            })
+        if not any(zip_code in col.lower() for col in column_names for zip_code in ['zip', 'postal_code', 'zip_code']):
+            recommendations.append({
+                'name': 'zip_code',
+                'type': 'string',
+                'description': 'Postal or ZIP code'
+            })
+    
+    # Check for contact information
+    if any(col.lower() in ['email', 'email_address'] for col in column_names) and not any(col.lower() in ['phone', 'phone_number', 'telephone'] for col in column_names):
+        recommendations.append({
+            'name': 'phone_number',
+            'type': 'string',
+            'description': 'Contact phone number'
+        })
+    elif any(col.lower() in ['phone', 'phone_number', 'telephone'] for col in column_names) and not any(col.lower() in ['email', 'email_address'] for col in column_names):
+        recommendations.append({
+            'name': 'email',
+            'type': 'email',
+            'description': 'Email address'
+        })
+    
+    # Check for date-related columns
+    date_columns = [col for col in column_names if any(date_term in col.lower() for date_term in ['date', 'created', 'modified', 'updated', 'timestamp'])]
+    if date_columns and not any('updated' in col.lower() or 'modified' in col.lower() for col in column_names):
+        recommendations.append({
+            'name': 'updated_at',
+            'type': 'date',
+            'description': 'Last update timestamp'
+        })
+    
+    # Check for ID columns
+    id_columns = [col for col in column_names if '_id' in col.lower() or col.lower() == 'id']
+    if not id_columns:
+        recommendations.append({
+            'name': 'id',
+            'type': 'integer',
+            'description': 'Unique identifier'
+        })
+    
+    # Add domain-specific recommendations based on column patterns
+    if any(col.lower() in ['product_name', 'product_id', 'item_name', 'item_id'] for col in column_names):
+        if not any(col.lower() in ['price', 'amount', 'cost'] for col in column_names):
+            recommendations.append({
+                'name': 'price',
+                'type': 'float',
+                'description': 'Product price'
+            })
+        if not any(col.lower() in ['quantity', 'qty', 'stock'] for col in column_names):
+            recommendations.append({
+                'name': 'quantity',
+                'type': 'integer',
+                'description': 'Quantity in stock'
+            })
+    
+    # Use Gemini to generate additional recommendations if needed
+    if len(recommendations) < 3:
+        try:
+            column_info = "\n".join([f"- {col['name']} ({col['type']}): {col['description']}" for col in columns])
+            sample_data_str = ""
+            if sample_data and len(sample_data) > 0:
+                sample_data_str = "Sample data (first row):\n" + json.dumps(sample_data[0], indent=2)
+            
+            prompt = f"""
+            Based on the following column information for a database table:
+            {column_info}
+            
+            {sample_data_str}
+            
+            Suggest 2-3 additional columns that would complement this dataset. For each suggestion, provide:
+            1. Column name (snake_case)
+            2. Data type (string, integer, float, boolean, date, email, phone, address, or name)
+            3. A brief description of what the column represents
+            
+            Format your response as a JSON array like this:
+            [
+              {{"name": "column_name", "type": "data_type", "description": "Description of the column"}},
+              ...
             ]
-        }}
+            Only provide the JSON array, no additional text.
+            """
+            
+            response = model.generate_content(prompt)
+            ai_suggestions = response.text
+            
+            # Try to extract and parse the JSON from the response
+            try:
+                # Find JSON array in response
+                json_match = re.search(r'\[\s*\{.*\}\s*\]', ai_suggestions, re.DOTALL)
+                if json_match:
+                    ai_suggestions = json_match.group(0)
+                
+                ai_recommendations = json.loads(ai_suggestions)
+                # Validate and add AI recommendations
+                for rec in ai_recommendations:
+                    if all(key in rec for key in ['name', 'type', 'description']):
+                        # Skip if we already have this column or recommendation
+                        if rec['name'] not in column_names and not any(r['name'] == rec['name'] for r in recommendations):
+                            # Ensure type is valid
+                            valid_types = ['string', 'integer', 'float', 'boolean', 'date', 'email', 'phone', 'address', 'name']
+                            if rec['type'] in valid_types:
+                                recommendations.append(rec)
+            except Exception as e:
+                # Fall back to predefined recommendations if AI parsing fails
+                pass
+                
+        except Exception as e:
+            # If Gemini API fails, proceed with only the rule-based recommendations
+            pass
+    
+    # Limit to a reasonable number of recommendations
+    return recommendations[:5]
+
+def generate_column_recommendations_for_table(table_name, columns, sample_data):
+    """Generate recommendations specific to the given table"""
+    # Start with general recommendations
+    recommendations = generate_column_recommendations(columns, sample_data)
+    
+    # Add table-specific recommendations based on table name
+    table_name_lower = table_name.lower()
+    
+    # For users or customers tables
+    if any(user_term in table_name_lower for user_term in ['user', 'customer', 'client', 'person', 'employee']):
+        potential_additions = [
+            {
+                'name': 'birthdate',
+                'type': 'date',
+                'description': 'Date of birth'
+            },
+            {
+                'name': 'gender',
+                'type': 'string',
+                'description': 'Gender identification'
+            },
+            {
+                'name': 'active',
+                'type': 'boolean',
+                'description': 'Whether the account is active'
+            }
+        ]
+        
+        # Only add if not already a column or recommendation
+        column_names = [col['name'] for col in columns]
+        recommendation_names = [rec['name'] for rec in recommendations]
+        
+        for addition in potential_additions:
+            if (addition['name'] not in column_names and 
+                addition['name'] not in recommendation_names):
+                recommendations.append(addition)
+    
+    # For orders or transactions tables
+    elif any(order_term in table_name_lower for order_term in ['order', 'transaction', 'purchase', 'sale']):
+        potential_additions = [
+            {
+                'name': 'total_amount',
+                'type': 'float',
+                'description': 'Total order amount'
+            },
+            {
+                'name': 'payment_status',
+                'type': 'string',
+                'description': 'Status of payment (paid, pending, canceled)'
+            },
+            {
+                'name': 'order_date',
+                'type': 'date',
+                'description': 'Date when the order was placed'
+            }
+        ]
+        
+        column_names = [col['name'] for col in columns]
+        recommendation_names = [rec['name'] for rec in recommendations]
+        
+        for addition in potential_additions:
+            if (addition['name'] not in column_names and 
+                addition['name'] not in recommendation_names):
+                recommendations.append(addition)
+    
+    # For products or inventory tables
+    elif any(product_term in table_name_lower for product_term in ['product', 'inventory', 'item', 'stock']):
+        potential_additions = [
+            {
+                'name': 'category',
+                'type': 'string',
+                'description': 'Product category'
+            },
+            {
+                'name': 'in_stock',
+                'type': 'boolean',
+                'description': 'Whether the product is in stock'
+            },
+            {
+                'name': 'description',
+                'type': 'string',
+                'description': 'Product description'
+            }
+        ]
+        
+        column_names = [col['name'] for col in columns]
+        recommendation_names = [rec['name'] for rec in recommendations]
+        
+        for addition in potential_additions:
+            if (addition['name'] not in column_names and 
+                addition['name'] not in recommendation_names):
+                recommendations.append(addition)
+    
+    # Limit to top 5 recommendations
+    return recommendations[:5]
+
+def generate_synthetic_data(columns, row_count, input_method, table_name, original_row_count):
+    """Generate synthetic data using the Gemini API"""
+    try:
+        # Create a structured prompt for Gemini
+        column_info = "\n".join([f"- {col['name']} ({col['type']}): {col['description']}" for col in columns])
+        
+        context = ""
+        if input_method == 'table':
+            context = f"This data is for a database table named '{table_name}'."
+        elif input_method == 'file' and original_row_count > 0:
+            context = f"This data should follow the pattern of the original data file which had {original_row_count} rows."
+        
+        prompt = f"""
+        Generate {row_count} rows of UNIQUE synthetic data for the following columns:
+        
+        {column_info}
+        
+        {context}
+        
+        Important requirements:
+        1. Each row must be completely UNIQUE - no duplicates across any rows
+        2. Data should be realistic and consistent
+        3. Follow the appropriate data types exactly
+        4. For 'string' types, generate appropriate text for the field name
+        5. For 'integer' types, generate appropriate numeric values
+        6. For 'float' types, use decimal values appropriate for the field
+        7. For 'boolean' types, use true/false values
+        8. For 'date' types, use ISO format dates (YYYY-MM-DD)
+        9. For 'email' types, generate realistic email addresses
+        10. For 'phone' types, generate phone numbers in standard format
+        11. For 'address' types, generate realistic addresses
+        12. For 'name' types, generate realistic person names
+        
+        Return ONLY a properly formatted JSON array where each object represents one row of data.
+        Format each field according to its correct data type. Do not include any explanations or comments.
         """
-
-        if len(prompt) > 30000:
-            prompt = prompt[:30000]
-
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.2, "topP": 0.8, "topK": 40}
-        }
-
-        url = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-
-        if response.status_code == 200:
-            response_data = response.json()
-            if 'candidates' in response_data and response_data['candidates']:
-                text = response_data['candidates'][0]['content']['parts'][0]['text']
-                try:
-                    return json.loads(text)
-                except:
-                    json_match = re.search(r'({[\s\S]*})', text)
-                    if json_match:
-                        return json.loads(json_match.group(1))
-                    return {"analysis": "Could not parse Gemini response", "transformations": []}
-            return {"analysis": "No candidates in response", "transformations": []}
-        else:
-            logger.warning(f"Gemini API returned status code {response.status_code}")
-            return {"analysis": f"API error: {response.status_code}", "transformations": []}
-
-    except requests.exceptions.Timeout:
-        logger.warning("Gemini API request timed out")
-        return {"analysis": "API request timed out", "transformations": []}
-    except requests.exceptions.RequestException as e:
-        logger.warning(f"Request error with Gemini API: {str(e)}")
-        return {"analysis": "API request failed", "transformations": []}
+        
+        # Call Gemini API
+        response = model.generate_content(prompt)
+        generated_text = response.text
+        
+        # Process response to extract JSON data
+        try:
+            # Clean the response by removing markdown code blocks and cleaning extra text
+            cleaned_text = generated_text.strip()
+            
+            # Remove markdown code blocks if present
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:].strip()
+            if cleaned_text.startswith("```"):
+                cleaned_text = cleaned_text[3:].strip()
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3].strip()
+            
+            # Try to parse the JSON
+            synthetic_data = json.loads(cleaned_text)
+            
+            # Clean data & enforce types
+            for row in synthetic_data:
+                for col in columns:
+                    col_name = col['name']
+                    col_type = col['type']
+                    
+                    # Skip if column is missing (will be filled later)
+                    if col_name not in row:
+                        continue
+                    
+                    # Clean and convert data based on type
+                    if col_type == 'integer':
+                        try:
+                            row[col_name] = int(float(str(row[col_name]).replace(',', '')))
+                        except (ValueError, TypeError):
+                            # If conversion fails, generate a random integer
+                            row[col_name] = np.random.randint(1, 1000)
+                    
+                    elif col_type == 'float':
+                        try:
+                            row[col_name] = float(str(row[col_name]).replace(',', ''))
+                        except (ValueError, TypeError):
+                            # If conversion fails, generate a random float
+                            row[col_name] = round(np.random.uniform(1, 1000), 2)
+                    
+                    elif col_type == 'boolean':
+                        if isinstance(row[col_name], str):
+                            row[col_name] = row[col_name].lower() in ['true', 'yes', 'y', '1']
+                        else:
+                            row[col_name] = bool(row[col_name])
+                    
+                    elif col_type == 'date':
+                        # Ensure date is in correct format
+                        try:
+                            # Try to parse and standardize date format
+                            date_obj = pd.to_datetime(row[col_name])
+                            row[col_name] = date_obj.strftime('%Y-%m-%d')
+                        except:
+                            # If date parsing fails, generate current date
+                            row[col_name] = datetime.now().strftime('%Y-%m-%d')
+            
+            # Fill in any missing columns with defaults
+            for row in synthetic_data:
+                for col in columns:
+                    if col['name'] not in row:
+                        # Generate defaults based on type
+                        if col['type'] == 'integer':
+                            row[col['name']] = np.random.randint(1, 1000)
+                        elif col['type'] == 'float':
+                            row[col['name']] = round(np.random.uniform(1, 1000), 2)
+                        elif col['type'] == 'boolean':
+                            row[col['name']] = bool(np.random.randint(0, 2))
+                        elif col['type'] == 'date':
+                            row[col['name']] = datetime.now().strftime('%Y-%m-%d')
+                        else:
+                            row[col['name']] = f"Default for {col['name']}"
+            
+            # If we didn't get enough data, pad with additional generated rows
+            if len(synthetic_data) < row_count:
+                additional_needed = row_count - len(synthetic_data)
+                
+                # Create template for random data generation based on existing rows
+                if len(synthetic_data) > 0:
+                    template = synthetic_data[0].copy()
+                else:
+                    template = {col['name']: None for col in columns}
+                
+                # Generate additional rows
+                for i in range(additional_needed):
+                    new_row = {}
+                    for col in columns:
+                        if col['type'] == 'integer':
+                            new_row[col['name']] = np.random.randint(1, 1000)
+                        elif col['type'] == 'float':
+                            new_row[col['name']] = round(np.random.uniform(1, 1000), 2)
+                        elif col['type'] == 'boolean':
+                            new_row[col['name']] = bool(np.random.randint(0, 2))
+                        elif col['type'] == 'date':
+                            new_row[col['name']] = (datetime.now() + pd.Timedelta(days=i)).strftime('%Y-%m-%d')
+                        elif col['type'] == 'email':
+                            new_row[col['name']] = f"user{i}_{uuid.uuid4().hex[:8]}@example.com"
+                        elif col['type'] == 'phone':
+                            new_row[col['name']] = f"+1-555-{np.random.randint(100, 999)}-{np.random.randint(1000, 9999)}"
+                        else:
+                            new_row[col['name']] = f"{col['name']}_{i}_{uuid.uuid4().hex[:8]}"
+                    
+                    synthetic_data.append(new_row)
+            
+            # Remove any extra rows if we got too many
+            if len(synthetic_data) > row_count:
+                synthetic_data = synthetic_data[:row_count]
+            
+            return synthetic_data
+        
+        except json.JSONDecodeError as e:
+            # If JSON parsing fails, generate fallback data
+            return generate_fallback_data(columns, row_count)
+    
     except Exception as e:
-        logger.exception(f"Error using Gemini API: {str(e)}")
-        return {"analysis": f"Error: {str(e)}", "transformations": []}
+        # If anything fails, generate fallback data
+        return generate_fallback_data(columns, row_count)
+
+def generate_fallback_data(columns, row_count):
+    """Generate fallback data if the Gemini API fails"""
+    synthetic_data = []
+    
+    for i in range(row_count):
+        row = {}
+        for col in columns:
+            col_name = col['name']
+            col_type = col['type']
+            
+            if col_type == 'integer':
+                row[col_name] = np.random.randint(1, 1000)
+            elif col_type == 'float':
+                row[col_name] = round(np.random.uniform(1, 1000), 2)
+            elif col_type == 'boolean':
+                row[col_name] = bool(np.random.randint(0, 2))
+            elif col_type == 'date':
+                # Generate a random date in the last year
+                days = np.random.randint(0, 365)
+                row[col_name] = (datetime.now() - pd.Timedelta(days=days)).strftime('%Y-%m-%d')
+            elif col_type == 'email':
+                row[col_name] = f"user{i}_{uuid.uuid4().hex[:8]}@example.com"
+            elif col_type == 'phone':
+                row[col_name] = f"+1-555-{np.random.randint(100, 999)}-{np.random.randint(1000, 9999)}"
+            elif col_type == 'name':
+                first_names = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Elizabeth"]
+                last_names = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor"]
+                row[col_name] = f"{np.random.choice(first_names)} {np.random.choice(last_names)}"
+            elif col_type == 'address':
+                streets = ["Main St", "Oak Ave", "Maple Rd", "Cedar Ln", "Pine Dr"]
+                cities = ["Springfield", "Rivertown", "Lakeside", "Hillcrest", "Meadowbrook"]
+                states = ["CA", "NY", "TX", "FL", "IL"]
+                row[col_name] = f"{np.random.randint(100, 9999)} {np.random.choice(streets)}, {np.random.choice(cities)}, {np.random.choice(states)} {np.random.randint(10000, 99999)}"
+            else:
+                # Default string type
+                row[col_name] = f"{col_name}_{i}_{uuid.uuid4().hex[:8]}"
+        
+        synthetic_data.append(row)
+    
+    return synthetic_data
