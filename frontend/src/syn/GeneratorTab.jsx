@@ -5,7 +5,7 @@ import axios from 'axios';
 export default function SyntheticDataGenerator() {
   const [step, setStep] = useState(1);
   const [inputMethod, setInputMethod] = useState(null);
-  const [tableName, setTableName] = useState('');
+  const [tableName, setTableName] = useState('hospitel');
   const [sampleFile, setSampleFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [columns, setColumns] = useState([]);

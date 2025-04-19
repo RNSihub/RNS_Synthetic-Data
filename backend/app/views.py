@@ -113,7 +113,7 @@ def get_table_columns_info(table_name):
     sample_data = [{col: row[i] for i, col in enumerate(column_names)} for row in sample_rows]
     return column_info, sample_data
 
-def generate_column_recommendations(columns, sample_data):
+def generate_column_recommendations(columns, sample_data, table_name=None):
     """Generate recommendations for additional columns based on existing columns and sample data"""
     column_names = [col['name'] for col in columns]
     column_types = {col['name']: col['type'] for col in columns}
@@ -165,11 +165,11 @@ def generate_column_recommendations(columns, sample_data):
 
     # Use Gemini to generate additional recommendations if needed
     if len(recommendations) < 3:
-        recommendations = augment_recommendations_with_gemini(columns, sample_data, recommendations)
+        recommendations = augment_recommendations_with_gemini(columns, sample_data, recommendations, table_name)
 
     return recommendations[:5]
 
-def augment_recommendations_with_gemini(columns, sample_data, recommendations):
+def augment_recommendations_with_gemini(columns, sample_data, recommendations, table_name=None):
     """Use Gemini to generate additional recommendations"""
     try:
         column_info = "\n".join([f"- {col['name']} ({col['type']}): {col['description']}" for col in columns])
@@ -177,11 +177,15 @@ def augment_recommendations_with_gemini(columns, sample_data, recommendations):
         if sample_data and len(sample_data) > 0:
             sample_data_str = "Sample data (first row):\n" + json.dumps(sample_data[0], indent=2)
 
+        table_context = f"This data is for a table named '{table_name}'." if table_name else ""
+
         prompt = f"""
         Based on the following column information for a database table:
         {column_info}
 
         {sample_data_str}
+
+        {table_context}
 
         Suggest 2-3 additional columns that would complement this dataset. For each suggestion, provide:
         1. Column name (snake_case)
@@ -433,17 +437,20 @@ def preview_file(request):
 
 @csrf_exempt
 def get_table_columns(request):
-    """Get columns from database table"""
+    """Generate column recommendations based on table name"""
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
-            table_name = sanitize_table_name(data.get('table_name'))
+            table_name = data.get('table_name')
 
-            column_info, sample_data = get_table_columns_info(table_name)
-            recommendations = generate_column_recommendations_for_table(table_name, column_info, sample_data)
+            if not table_name:
+                return JsonResponse({'error': 'Table name is required'}, status=400)
+
+            # Generate recommendations based on table name
+            recommendations = generate_column_recommendations([], [], table_name)
 
             return JsonResponse({
-                'columns': column_info,
+                'columns': [],
                 'recommendations': recommendations
             })
 
