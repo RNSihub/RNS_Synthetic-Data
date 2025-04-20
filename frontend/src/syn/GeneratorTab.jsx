@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Upload, Database, ArrowRight, Download, Table, FileSpreadsheet, RotateCcw, Check } from 'lucide-react';
 import axios from 'axios';
-import PreviewTab from './PreviewTab'; // Import the PreviewTab component
+import PreviewTab from '../components/PreSam'; // Import the PreviewTab component
 
 export default function SyntheticDataGenerator() {
   const [step, setStep] = useState(1);

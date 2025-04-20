@@ -31,9 +31,9 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
       </nav>
       <div className="mt-auto p-4 border-t border-gray-700">
         <div className="flex items-center space-x-2">
-          <img src="/api/placeholder/32/32" alt="User" className="rounded-full" />
+          <img src="https://cdn.pixabay.com/photo/2022/05/17/21/41/naruto-7203817_640.jpg" alt="User" className="rounded-[6px] max-w-14 max-h-14" />
           <div>
-            <p className="font-medium">Demo User</p>
+            <p className="font-medium">RNS</p>
             <p className="text-xs text-gray-400">sanjay@RNS-SynthGenie.com</p>
           </div>
         </div>
