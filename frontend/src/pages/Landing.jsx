@@ -9,7 +9,7 @@ export default function LandingPage() {
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-2">
             <Database className="text-orange-600" size={28} />
-            <span className="text-2xl font-bold text-gray-800">SynthGenie</span>
+            <span className="text-2xl font-bold text-gray-800">RNS-SynthGenie</span>
           </div>
           <div className="hidden md:flex space-x-6">
             <a href="#features" className="text-gray-700 hover:text-orange-600">Features</a>
@@ -30,11 +30,11 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto text-center">
           <h1 className="text-5xl font-bold text-gray-900 mb-6">Generate Realistic Synthetic Data</h1>
           <p className="text-xl text-gray-600 mb-10 max-w-3xl mx-auto">
-            SynthGenie leverages AI to create high-quality synthetic datasets for development,
+            RNS-SynthGenie leverages AI to create high-quality synthetic datasets for development,
             testing, and machine learning — without compromising real data.
           </p>
           <div className="flex justify-center space-x-4">
-          <a href="/home"><button className="bg-orange-600 hover:bg-orange-700 text-white font-medium py-3 px-8 rounded-lg text-lg">
+            <a href="/home"><button className="bg-orange-600 hover:bg-orange-700 text-white font-medium py-3 px-8 rounded-lg text-lg">
               Try It Now
             </button></a>
             <a href="/info"><button className="bg-white border-2 border-orange-600 text-orange-600 hover:bg-orange-50 font-medium py-3 px-8 rounded-lg text-lg">
@@ -111,7 +111,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-xl font-semibold mb-3 text-gray-800">Developer API</h3>
               <p className="text-gray-600">
-                Access SynthGenie's capabilities programmatically through our developer API.
+                Access RNS-SynthGenie's capabilities programmatically through our developer API.
               </p>
             </div>
           </div>
@@ -123,7 +123,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto text-center">
           <h2 className="text-3xl font-bold text-gray-900 mb-6">How It Works</h2>
           <p className="text-xl text-gray-600 mb-10 max-w-3xl mx-auto">
-            Learn how SynthGenie leverages AI to create high-quality synthetic datasets for your needs.
+            Learn how RNS-SynthGenie leverages AI to create high-quality synthetic datasets for your needs.
           </p>
         </div>
       </section>
@@ -133,7 +133,7 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl font-bold mb-4">Ready to Generate Perfect Synthetic Data?</h2>
           <p className="text-lg mb-8 opacity-90">
-            Join thousands of developers and data scientists using SynthGenie to create high-quality datasets.
+            Join thousands of developers and data scientists using RNS-SynthGenie to create high-quality datasets.
           </p>
           <a href='/home'><button className="bg-white text-orange-600 font-bold py-3 px-8 rounded-lg text-lg hover:bg-gray-100">
             Start Free Trial
@@ -148,7 +148,7 @@ export default function LandingPage() {
             <div className="mb-8 md:mb-0">
               <div className="flex items-center space-x-2 mb-4">
                 <Database className="text-orange-500" size={24} />
-                <span className="text-xl font-bold text-white">SynthGenie</span>
+                <span className="text-xl font-bold text-white">RNS-SynthGenie</span>
               </div>
               <p className="text-gray-400 max-w-xs">
                 The intelligent synthetic data generator for developers and data scientists.
@@ -182,7 +182,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="border-t border-gray-700 mt-10 pt-6 text-center text-gray-400">
-            &copy; {new Date().getFullYear()} SynthGenie. All rights reserved.
+            &copy; {new Date().getFullYear()} RNS-SynthGenie. All rights reserved.
           </div>
         </div>
       </footer>

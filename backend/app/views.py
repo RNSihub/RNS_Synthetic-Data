@@ -1,10 +1,8 @@
 import json
-import os
 import pandas as pd
 import numpy as np
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.db import connection
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import uuid
@@ -29,12 +27,6 @@ model = genai.GenerativeModel(
     safety_settings=safety_settings,
     generation_config={"temperature": 0.7, "max_output_tokens": 8192}
 )
-
-def sanitize_table_name(table_name):
-    """Sanitize table name to prevent SQL injection"""
-    if not re.match(r'^[a-zA-Z0-9_]+$', table_name):
-        raise ValueError('Invalid table name')
-    return table_name
 
 def get_column_info(file):
     """Extract column information from a file"""
@@ -66,52 +58,6 @@ def get_column_info(file):
         })
 
     return column_info, df
-
-def get_table_columns_info(table_name):
-    """Get columns from database table"""
-    with connection.cursor() as cursor:
-        # Check if table exists
-        cursor.execute(f"""
-            SELECT COUNT(*)
-            FROM information_schema.tables
-            WHERE table_name = %s
-        """, [table_name])
-        if cursor.fetchone()[0] == 0:
-            raise ValueError(f'Table {table_name} does not exist')
-
-        # Get column information
-        cursor.execute(f"""
-            SELECT column_name, data_type
-            FROM information_schema.columns
-            WHERE table_name = %s
-        """, [table_name])
-        columns = cursor.fetchall()
-
-        # Get sample data for better description
-        cursor.execute(f"SELECT * FROM {table_name} LIMIT 5")
-        sample_rows = cursor.fetchall()
-        column_names = [desc[0] for desc in cursor.description]
-
-    column_info = []
-    for col_name, data_type in columns:
-        mapped_type = 'string'
-        if 'int' in data_type or 'serial' in data_type:
-            mapped_type = 'integer'
-        elif 'float' in data_type or 'double' in data_type or 'numeric' in data_type:
-            mapped_type = 'float'
-        elif 'date' in data_type or 'time' in data_type:
-            mapped_type = 'date'
-        elif 'bool' in data_type:
-            mapped_type = 'boolean'
-
-        column_info.append({
-            'name': col_name,
-            'type': mapped_type,
-            'description': f'Database column: {col_name} ({data_type})'
-        })
-
-    sample_data = [{col: row[i] for i, col in enumerate(column_names)} for row in sample_rows]
-    return column_info, sample_data
 
 def generate_column_recommendations(columns, sample_data, table_name=None):
     """Generate recommendations for additional columns based on existing columns and sample data"""
@@ -164,7 +110,7 @@ def generate_column_recommendations(columns, sample_data, table_name=None):
             recommendations.append({'name': 'quantity', 'type': 'integer', 'description': 'Quantity in stock'})
 
     # Use Gemini to generate additional recommendations if needed
-    if len(recommendations) < 3:
+    if len(recommendations) < 6:
         recommendations = augment_recommendations_with_gemini(columns, sample_data, recommendations, table_name)
 
     return recommendations[:5]

@@ -15,7 +15,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     <aside className="w-64 bg-gray-800 text-white">
       <div className="p-4 flex items-center space-x-2">
         <Database className="text-orange-500" size={24} />
-        <span className="text-xl font-bold">SynthGenie</span>
+        <span className="text-xl font-bold">RNS-SynthGenie</span>
       </div>
       <nav className="mt-8">
         {tabs.map((tab) => (
@@ -34,7 +34,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
           <img src="/api/placeholder/32/32" alt="User" className="rounded-full" />
           <div>
             <p className="font-medium">Demo User</p>
-            <p className="text-xs text-gray-400">demo@synthgenie.com</p>
+            <p className="text-xs text-gray-400">sanjay@RNS-SynthGenie.com</p>
           </div>
         </div>
       </div>

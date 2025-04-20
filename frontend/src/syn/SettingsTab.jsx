@@ -9,7 +9,7 @@ const SettingsTab = () => {
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="p-4 border-b border-gray-200">
           <h2 className="font-medium">Application Settings</h2>
-          <p className="text-sm text-gray-500 mt-1">Configure your SynthGenie preferences.</p>
+          <p className="text-sm text-gray-500 mt-1">Configure your RNS-SynthGenie preferences.</p>
         </div>
         <div className="p-6 space-y-6">
           <div>

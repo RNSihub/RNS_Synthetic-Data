@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/nav';
 import MainContent from '../syn/Main';
+import Loading from '../components/loading'; // Import the Loading component
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('generator');
@@ -11,6 +12,16 @@ export default function Dashboard() {
     dataTypes: ['names', 'emails', 'addresses', 'phone'],
     format: 'json'
   });
+  const [isLoading, setIsLoading] = useState(true); // Add isLoading state
+
+  useEffect(() => {
+    // Simulate a loading delay
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleGenerate = () => {
     setIsGenerating(true);
@@ -41,6 +52,10 @@ export default function Dashboard() {
   const handleExport = (format) => {
     alert(`Exporting data in ${format} format...`);
   };
+
+  if (isLoading) {
+    return <Loading />; // Render the Loading component if isLoading is true
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
