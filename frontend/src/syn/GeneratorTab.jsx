@@ -172,6 +172,10 @@ export default function SyntheticDataGenerator() {
     URL.revokeObjectURL(url);
   };
 
+  const updateData = (newData) => {
+    setGeneratedData(newData);
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <header className="bg-gray-800 text-white py-4 px-6 rounded-[15px]">
@@ -606,7 +610,7 @@ export default function SyntheticDataGenerator() {
         )}
 
         {activeTab === 'preview' && (
-          <PreviewTab generatedData={generatedData} setActiveTab={setActiveTab} />
+          <PreviewTab generatedData={generatedData} setActiveTab={setActiveTab} updateData={updateData} />
         )}
       </main>
 
