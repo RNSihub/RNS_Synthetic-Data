@@ -512,46 +512,43 @@ export default function SyntheticDataGenerator() {
                 </div>
 
                 <div className="mb-6">
-  <h3 className="text-lg font-medium mb-3">Data Preview</h3>
-
-  <div className="overflow-auto max-h-[300px] border rounded-md">
-    <table className="min-w-full divide-y divide-gray-200">
-      <thead className="bg-gray-50">
-        <tr>
-          {columns.map((column, index) => (
-            <th
-              key={index}
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-            >
-              {column.name}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody className="bg-white divide-y divide-gray-200">
-        {generatedData && generatedData.map((row, rowIndex) => (
-          <tr key={rowIndex}>
-            {columns.map((column, colIndex) => (
-              <td
-                key={colIndex}
-                className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"
-              >
-                {String(row[column.name])}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-
-  {generatedData && generatedData.length > 5 && (
-    <p className="mt-2 text-sm text-gray-500 text-center">
-      Showing first {generatedData.length} rows
-    </p>
-  )}
-</div>
-
+                  <h3 className="text-lg font-medium mb-3">Data Preview</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          {columns.map((column, index) => (
+                            <th
+                              key={index}
+                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                              {column.name}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {generatedData && generatedData.slice(0, 5).map((row, rowIndex) => (
+                          <tr key={rowIndex}>
+                            {columns.map((column, colIndex) => (
+                              <td
+                                key={colIndex}
+                                className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"
+                              >
+                                {String(row[column.name])}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {generatedData && generatedData.length > 5 && (
+                      <p className="mt-2 text-sm text-gray-500 text-center">
+                        Showing 5 of {generatedData.length} rows
+                      </p>
+                    )}
+                  </div>
+                </div>
 
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-4">
                   <button
