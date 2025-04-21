@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { updateData } from './updateData'; // Correct import statement
 
-const PreviewTab = ({ generatedData, setActiveTab }) => {
+const PreviewTab = ({ setActiveTab }) => {
   // Core state
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,6 +34,9 @@ const PreviewTab = ({ generatedData, setActiveTab }) => {
   const [showChartModal, setShowChartModal] = useState(false);
   const [chartColumn, setChartColumn] = useState(null);
   const [chartType, setChartType] = useState('bar'); // bar, line, pie
+
+  // State for generated data
+  const [generatedData, setGeneratedData] = useState([]);
 
   // Check for mobile view on mount and resize
   useEffect(() => {
@@ -342,7 +345,7 @@ const PreviewTab = ({ generatedData, setActiveTab }) => {
 
         // Update full data
         if (parsedData.length > 0) {
-          updateData(parsedData);
+          setGeneratedData(parsedData);
           setShowImportModal(false);
         } else {
           setImportError('No data found in file');
