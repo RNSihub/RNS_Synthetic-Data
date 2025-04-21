@@ -18,7 +18,7 @@ export default function Dashboard() {
     // Simulate a loading delay
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 0);
+    }, 6500);
 
     return () => clearTimeout(timer);
   }, []);

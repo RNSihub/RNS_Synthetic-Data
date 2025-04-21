@@ -4,6 +4,9 @@ import Home from "./pages/Home";
 import HowItWorks from "./pages/hiw"; // Correct the import statement
 import LandingPage from "./pages/Landing";// Correct the import statement
 import Price_list from "./pages/pricing";
+import Login from "./pages/login";
+import Signup from "./pages/signup";
+import ForgotPassword from "./pages/forgot";
 import Informative from "./unoff/Info";
 import { Toaster } from 'react-hot-toast';
 
@@ -26,6 +29,9 @@ function App() {
           <Route path="/howitworks" element={<HowItWorks />} /> {/* Correct the element */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/Landing" element={<LandingPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/home" element={<Home />} />
           <Route path="/price" element={<Price_list />} />
           <Route path="/info" element={<Informative />} />

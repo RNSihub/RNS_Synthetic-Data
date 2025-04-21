@@ -19,14 +19,14 @@ export default function LandingPage() {
           <div>
             <button className="bg-orange-600 hover:bg-orange-700 text-white py-2 px-4 rounded-lg flex items-center">
               <LogIn size={18} className="mr-2" />
-              <a href="/home" className="text-white">Get Started</a>
+              <a href="/login" className="text-white">Get Started</a>
             </button>
           </div>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <section id="home" className="py-20 px-6">
+      <section id="login" className="py-20 px-6">
         <div className="max-w-6xl mx-auto text-center">
           <h1 className="text-5xl font-bold text-gray-900 mb-6">Generate Realistic Synthetic Data</h1>
           <p className="text-xl text-gray-600 mb-10 max-w-3xl mx-auto">
@@ -34,7 +34,7 @@ export default function LandingPage() {
             testing, and machine learning — without compromising real data.
           </p>
           <div className="flex justify-center space-x-4">
-            <a href="/home"><button className="bg-orange-600 hover:bg-orange-700 text-white font-medium py-3 px-8 rounded-lg text-lg">
+            <a href="/"><button className="bg-orange-600 hover:bg-orange-700 text-white font-medium py-3 px-8 rounded-lg text-lg">
               Try It Now
             </button></a>
             <a href="/info"><button className="bg-white border-2 border-orange-600 text-orange-600 hover:bg-orange-50 font-medium py-3 px-8 rounded-lg text-lg">
@@ -135,7 +135,7 @@ export default function LandingPage() {
           <p className="text-lg mb-8 opacity-90">
             Join thousands of developers and data scientists using RNS-SynthGenie to create high-quality datasets.
           </p>
-          <a href='/home'><button className="bg-white text-orange-600 font-bold py-3 px-8 rounded-lg text-lg hover:bg-gray-100">
+          <a href='/login'><button className="bg-white text-orange-600 font-bold py-3 px-8 rounded-lg text-lg hover:bg-gray-100">
             Start Free Trial
           </button></a>
         </div>
