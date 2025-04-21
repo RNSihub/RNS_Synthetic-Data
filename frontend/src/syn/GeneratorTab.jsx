@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Upload, Database, ArrowRight, Download, Table, FileSpreadsheet, RotateCcw, Check } from 'lucide-react';
 import axios from 'axios';
 import PreviewTab from '../components/PreSam'; // Import the PreviewTab component
+import ExportImportTab from './ExportTab'; // Import the ExportImportTab component
 
 export default function SyntheticDataGenerator() {
   const [step, setStep] = useState(1);
@@ -153,23 +154,6 @@ export default function SyntheticDataGenerator() {
     setError(null);
     setRecommendations([]);
     setActiveTab('generator'); // Reset to generator tab
-  };
-
-  const downloadData = (format) => {
-    if (!generatedData) return;
-
-    const blob = new Blob([format === 'json' ? JSON.stringify(generatedData, null, 2) : generatedData.map(row => Object.values(row).join(',')).join('\n')], {
-      type: format === 'json' ? 'application/json' : 'text/csv',
-    });
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `synthetic_data.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   const updateData = (newData) => {
@@ -557,18 +541,10 @@ export default function SyntheticDataGenerator() {
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-4">
                   <button
                     className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 flex items-center justify-center"
-                    onClick={() => downloadData('json')}
+                    onClick={() => setActiveTab('export')}
                   >
-                    <Download className="mr-2" size={18} />
-                    Download JSON
-                  </button>
-
-                  <button
-                    className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 flex items-center justify-center"
-                    onClick={() => downloadData('csv')}
-                  >
-                    <FileSpreadsheet className="mr-2" size={18} />
-                    Download CSV
+                    <Table className="mr-2" size={18} />
+                    Export Data
                   </button>
 
                   <button
@@ -607,6 +583,10 @@ export default function SyntheticDataGenerator() {
               </div>
             )}
           </>
+        )}
+
+        {activeTab === 'export' && (
+          <ExportImportTab generatedData={generatedData} setActiveTab={setActiveTab} />
         )}
 
         {activeTab === 'preview' && (

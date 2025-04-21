@@ -11,7 +11,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
 import pyarrow as pa
 import pyarrow.parquet as pq
-import tensorflow as tf
+# import tensorflow as tf
 import pickle
 from django.core.files.uploadedfile import UploadedFile
 
@@ -44,7 +44,7 @@ def export_data(request):
             'excel': export_excel,
             'sql': export_sql,
             'parquet': export_parquet,
-            'tfrecord': export_tfrecord,
+            # 'tfrecord': export_tfrecord,
             'pickle': export_pickle,
             'train_test_split': export_train_test_split,
             'bundle': export_bundle,
