@@ -184,3 +184,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Create necessary directories for storing merged files
 MERGED_CSV_DIR = os.path.join(MEDIA_ROOT, 'merged_csv')
 os.makedirs(MERGED_CSV_DIR, exist_ok=True)
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+]

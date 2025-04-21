@@ -2,6 +2,8 @@ from django.urls import path
 from . import views
 from . import export
 from . import auth
+from . import clean
+
 urlpatterns = [
     path('api/preview-file/', views.preview_file, name='preview_file'),
     path('api/get-table-columns/', views.get_table_columns, name='get_table_columns'),
@@ -18,4 +20,9 @@ urlpatterns = [
     path('api/verify-reset-code/', auth.verify_reset_code, name='verify_reset_code'),
     path('api/reset-password/', auth.reset_password, name='reset_password'),
     path('api/change-password/', auth.change_password, name='change_password'),
+    
+    #clean
+    path('api/import-data-clean/', clean.import_data, name='import_data'),
+    path('api/process-data-clean/', clean.process_data, name='process_data'),
+    path('api/get-csrf-token/', export.get_csrf_token , name='get_csrf_token'),
 ]

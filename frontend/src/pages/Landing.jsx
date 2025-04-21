@@ -34,7 +34,7 @@ export default function LandingPage() {
             testing, and machine learning — without compromising real data.
           </p>
           <div className="flex justify-center space-x-4">
-            <a href="/"><button className="bg-orange-600 hover:bg-orange-700 text-white font-medium py-3 px-8 rounded-lg text-lg">
+            <a href="/login"><button className="bg-orange-600 hover:bg-orange-700 text-white font-medium py-3 px-8 rounded-lg text-lg">
               Try It Now
             </button></a>
             <a href="/info"><button className="bg-white border-2 border-orange-600 text-orange-600 hover:bg-orange-50 font-medium py-3 px-8 rounded-lg text-lg">

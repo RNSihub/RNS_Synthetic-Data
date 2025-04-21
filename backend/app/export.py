@@ -9,14 +9,46 @@ import numpy as np
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import ensure_csrf_cookie
 import pyarrow as pa
 import pyarrow.parquet as pq
-# import tensorflow as tf
+import tensorflow as tf
 import pickle
 from django.core.files.uploadedfile import UploadedFile
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+import re
+from datetime import datetime
+import google.generativeai as genai
+from django.conf import settings
+import logging
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser, JSONParser
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.http import JsonResponse
 
-@csrf_protect
-@require_POST
+@ensure_csrf_cookie
+def get_csrf_token(request):
+    return JsonResponse({"message": "CSRF cookie set."})
+
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+# Configure Gemini API
+GEMINI_API_KEY = "AIzaSyB8gETGUcZwHqUmF1dJIm_MYbeWjWBup3M"
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-1.5-pro')
+
+def allowed_file(filename):
+    """Check if file type is allowed"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'csv', 'json', 'xlsx', 'xls'}
+
+def secure_filename(filename):
+    """Secure a filename to prevent path traversal attacks"""
+    return os.path.basename(filename)
+
+@api_view(['POST'])
 def export_data(request):
     """Handle various export formats for synthetic data"""
     try:
@@ -44,7 +76,7 @@ def export_data(request):
             'excel': export_excel,
             'sql': export_sql,
             'parquet': export_parquet,
-            # 'tfrecord': export_tfrecord,
+            'tfrecord': export_tfrecord,
             'pickle': export_pickle,
             'train_test_split': export_train_test_split,
             'bundle': export_bundle,
@@ -60,42 +92,56 @@ def export_data(request):
     except Exception as e:
         return JsonResponse({'error': f'Export error: {str(e)}'}, status=500)
 
-@csrf_protect
-@require_POST
+@api_view(['POST'])
+@parser_classes([MultiPartParser])
 def import_data(request):
-    """Handle file import for synthetic data"""
+    """Import data from uploaded file"""
+    if 'file' not in request.FILES:
+        return JsonResponse({'error': 'No file uploaded'}, status=400)
+
+    file = request.FILES['file']
+    if not allowed_file(file.name):
+        return JsonResponse({'error': 'File type not allowed'}, status=400)
+
     try:
-        if 'file' not in request.FILES:
-            return JsonResponse({'error': 'No file provided'}, status=400)
+        filename = secure_filename(file.name)
+        file_path = os.path.join('temp', filename)
 
-        file: UploadedFile = request.FILES['file']
-        file_type = file.name.rsplit('.', 1)[-1].lower()
+        # Ensure the directory exists
+        os.makedirs('temp', exist_ok=True)
 
-        # Validate file size (e.g., max 100MB)
-        max_size = 100 * 1024 * 1024  # 100MB
-        if file.size > max_size:
-            return JsonResponse({'error': 'File size exceeds 100MB limit'}, status=400)
+        # Save the file temporarily
+        with open(file_path, 'wb+') as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
 
-        # Read file based on type
-        try:
-            if file_type == 'csv':
-                df = pd.read_csv(file)
-            elif file_type == 'json':
-                df = pd.read_json(file)
-            elif file_type in ['xlsx', 'xls']:
-                df = pd.read_excel(file)
-            else:
-                return JsonResponse({'error': f'Unsupported file format: {file_type}'}, status=400)
-        except Exception as e:
-            return JsonResponse({'error': f'Failed to parse file: {str(e)}'}, status=400)
+        # Process the file based on its type
+        file_extension = filename.rsplit('.', 1)[1].lower()
 
-        # Convert DataFrame to list of dictionaries
-        data = df.replace({np.nan: None}).to_dict(orient='records')
-        return JsonResponse({'data': data})
+        if file_extension == 'csv':
+            df = pd.read_csv(file_path)
+        elif file_extension == 'json':
+            df = pd.read_json(file_path)
+        elif file_extension in ['xlsx', 'xls']:
+            df = pd.read_excel(file_path)
+        else:
+            return JsonResponse({'error': 'Unsupported file type'}, status=400)
+
+        # Convert DataFrame to list of dicts
+        data = df.replace({np.nan: None}).to_dict('records')
+
+        # Delete the temporary file
+        os.remove(file_path)
+
+        return JsonResponse({'data': data}, status=200)
 
     except Exception as e:
-        return JsonResponse({'error': f'Import error: {str(e)}'}, status=500)
-
+        logger.error(f"Error importing data: {str(e)}")
+        return JsonResponse({'error': f'Import failed: {str(e)}'}, status=500)
+    
+    
+@api_view(['POST'])
+@parser_classes([MultiPartParser])
 def export_json(df, options=None):
     """Export data as JSON"""
     try:

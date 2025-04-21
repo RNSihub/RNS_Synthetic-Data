@@ -1,3 +1,5 @@
+// ExportImportTab.js
+
 import React, { useState, useEffect } from 'react';
 import {
   Download, AlertCircle, FileSpreadsheet, Database, FileJson,
@@ -7,12 +9,12 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ExportImportTab = ({ generatedData, setActiveTab }) => {
+const ExportImportTab = ({ processedData, setActiveTab }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importStatus, setImportStatus] = useState(null);
   const [exportStatus, setExportStatus] = useState(null);
-  const [tableData, setTableData] = useState(generatedData || []);
+  const [tableData, setTableData] = useState(processedData || []);
   const [splitRatio, setSplitRatio] = useState(0.8);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -20,6 +22,22 @@ const ExportImportTab = ({ generatedData, setActiveTab }) => {
   const [selectedFormat, setSelectedFormat] = useState(null);
   const [exportProgress, setExportProgress] = useState(0);
   const [currentOperation, setCurrentOperation] = useState(null); // 'import' or 'export-format'
+  const [csrfToken, setCsrfToken] = useState('');
+
+  const getCookie = (name) => {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let cookie of cookies) {
+        cookie = cookie.trim();
+        if (cookie.startsWith(name + '=')) {
+          cookieValue = decodeURIComponent(cookie.slice(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  };
 
   // Handle file drop
   const handleDrag = (e) => {
@@ -31,6 +49,17 @@ const ExportImportTab = ({ generatedData, setActiveTab }) => {
       setDragActive(false);
     }
   };
+
+  useEffect(() => {
+    fetch('http://127.0.0.1:8000/api/get-csrf-token/', {
+      method: 'GET',
+      credentials: 'include', // 👈 important: allow cookie to be set
+    })
+    .then(() => {
+      const token = getCookie('csrftoken');
+      setCsrfToken(token);
+    });
+  }, []);
 
   // Handle file drop
   const handleDrop = (e) => {
@@ -151,6 +180,10 @@ const ExportImportTab = ({ generatedData, setActiveTab }) => {
       const response = await fetch('http://127.0.0.1:8000/api/import-data/', {
         method: 'POST',
         body: formData,
+        credentials: 'include',
+        headers: {
+          'X-CSRFToken': csrfToken,
+        },
       });
 
       clearInterval(simulateProgress);
@@ -220,10 +253,12 @@ const ExportImportTab = ({ generatedData, setActiveTab }) => {
 
       const response = await fetch('http://127.0.0.1:8000/api/export-data/', {
         method: 'POST',
+        credentials: 'include', // ensures cookies (like CSRF) are sent
         headers: {
           'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken, // your CSRF token from cookies
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload), // your payload object (format, data, options)
       });
 
       clearInterval(simulateProgress);
@@ -380,7 +415,7 @@ const ExportImportTab = ({ generatedData, setActiveTab }) => {
 
       <div className="space-y-6">
         {/* Import Section - Conditionally rendered */}
-        {!generatedData.length && (
+        {!processedData.length && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
