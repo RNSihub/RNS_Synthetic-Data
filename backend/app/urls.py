@@ -3,6 +3,7 @@ from . import views
 from . import export
 from . import auth
 from . import clean
+from . import bot
 
 urlpatterns = [
     path('api/preview-file/', views.preview_file, name='preview_file'),
@@ -25,4 +26,7 @@ urlpatterns = [
     path('api/import-data-clean/', clean.import_data, name='import_data'),
     path('api/process-data-clean/', clean.process_data, name='process_data'),
     path('api/get-csrf-token/', export.get_csrf_token , name='get_csrf_token'),
+    
+    #bot
+    path('api/bot-chat/', bot.generate_data_view, name='bot-chat'),
 ]
