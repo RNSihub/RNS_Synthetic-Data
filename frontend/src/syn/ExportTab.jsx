@@ -1,5 +1,3 @@
-// ExportImportTab.js
-
 import React, { useState, useEffect } from 'react';
 import {
   Download, AlertCircle, FileSpreadsheet, Database, FileJson,
@@ -9,12 +7,12 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ExportImportTab = ({ processedData, setActiveTab }) => {
+const ExportImportTab = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importStatus, setImportStatus] = useState(null);
   const [exportStatus, setExportStatus] = useState(null);
-  const [tableData, setTableData] = useState(processedData || []);
+  const [tableData, setTableData] = useState([]);
   const [splitRatio, setSplitRatio] = useState(0.8);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -22,22 +20,6 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
   const [selectedFormat, setSelectedFormat] = useState(null);
   const [exportProgress, setExportProgress] = useState(0);
   const [currentOperation, setCurrentOperation] = useState(null); // 'import' or 'export-format'
-  const [csrfToken, setCsrfToken] = useState('');
-
-  const getCookie = (name) => {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let cookie of cookies) {
-        cookie = cookie.trim();
-        if (cookie.startsWith(name + '=')) {
-          cookieValue = decodeURIComponent(cookie.slice(name.length + 1));
-          break;
-        }
-      }
-    }
-    return cookieValue;
-  };
 
   // Handle file drop
   const handleDrag = (e) => {
@@ -49,17 +31,6 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
       setDragActive(false);
     }
   };
-
-  useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/get-csrf-token/', {
-      method: 'GET',
-      credentials: 'include', // 👈 important: allow cookie to be set
-    })
-    .then(() => {
-      const token = getCookie('csrftoken');
-      setCsrfToken(token);
-    });
-  }, []);
 
   // Handle file drop
   const handleDrop = (e) => {
@@ -78,33 +49,33 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
 
     // Check file type
     const validTypes = [
-      'text/csv',
-      'application/json',
+      'text/csv', 
+      'application/json', 
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'application/vnd.ms-excel'
     ];
-
+    
     if (!validTypes.includes(file.type) && !file.name.match(/\.(csv|json|xlsx|xls)$/i)) {
-      setImportStatus({
-        type: 'error',
-        message: 'Invalid file type. Please upload a CSV, JSON, or Excel file.'
+      setImportStatus({ 
+        type: 'error', 
+        message: 'Invalid file type. Please upload a CSV, JSON, or Excel file.' 
       });
       return;
     }
 
     // Check file size (10MB limit)
     if (file.size > 10 * 1024 * 1024) {
-      setImportStatus({
-        type: 'error',
-        message: 'File too large. Maximum size is 10MB.'
+      setImportStatus({ 
+        type: 'error', 
+        message: 'File too large. Maximum size is 10MB.' 
       });
       return;
     }
 
     setImportFile(file);
-    setImportStatus({
-      type: 'info',
-      message: `${file.name} selected. Click Import to proceed.`
+    setImportStatus({ 
+      type: 'info', 
+      message: `${file.name} selected. Click Import to proceed.` 
     });
 
     // Preview the first few lines
@@ -114,7 +85,7 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
   // Preview file contents
   const previewFileContents = (file) => {
     const reader = new FileReader();
-
+    
     if (file.type === 'application/json' || file.name.match(/\.json$/i)) {
       reader.onload = (e) => {
         try {
@@ -180,10 +151,6 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
       const response = await fetch('http://127.0.0.1:8000/api/import-data/', {
         method: 'POST',
         body: formData,
-        credentials: 'include',
-        headers: {
-          'X-CSRFToken': csrfToken,
-        },
       });
 
       clearInterval(simulateProgress);
@@ -253,12 +220,10 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
 
       const response = await fetch('http://127.0.0.1:8000/api/export-data/', {
         method: 'POST',
-        credentials: 'include', // ensures cookies (like CSRF) are sent
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': csrfToken, // your CSRF token from cookies
         },
-        body: JSON.stringify(payload), // your payload object (format, data, options)
+        body: JSON.stringify(payload),
       });
 
       clearInterval(simulateProgress);
@@ -327,8 +292,7 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
     setImportStatus(null);
     setExportStatus(null);
     setShowAdvanced(false);
-    setActiveTab('generator'); // Reset to generator tab
-
+    
     // Clear file input
     const fileInput = document.querySelector('input[type="file"]');
     if (fileInput) fileInput.value = '';
@@ -372,7 +336,7 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
         <p className={`${textColor} text-sm`}>{status.message}</p>
         {exportProgress > 0 && (
           <div className="ml-auto w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
+            <div 
               className="h-full bg-orange-500 transition-all duration-300"
               style={{ width: `${exportProgress}%` }}
             ></div>
@@ -398,7 +362,7 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
 
   return (
     <div className="pb-8">
-      <motion.h1
+      <motion.h1 
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
@@ -414,131 +378,129 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
       </AnimatePresence>
 
       <div className="space-y-6">
-        {/* Import Section - Conditionally rendered */}
-        {!processedData.length && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="bg-white rounded-xl shadow-md p-6 border border-gray-100"
+        {/* Import Section - Always shown */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="bg-white rounded-xl shadow-md p-6 border border-gray-100"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-800 flex items-center">
+              <FileInput size={20} className="mr-2 text-orange-600" />
+              Import Data
+            </h2>
+            {tableData.length > 0 && (
+              <div className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center">
+                <FileCheck size={14} className="mr-1" />
+                {tableData.length} records loaded
+              </div>
+            )}
+          </div>
+
+          <div 
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${dragActive ? 'border-orange-400 bg-orange-50' : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50'}`}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
           >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-800 flex items-center">
-                <FileInput size={20} className="mr-2 text-orange-600" />
-                Import Data
-              </h2>
-              {tableData.length > 0 && (
-                <div className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full flex items-center">
-                  <FileCheck size={14} className="mr-1" />
-                  {tableData.length} records loaded
+            {importFile ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex flex-col items-center"
+              >
+                <div className="bg-orange-100 p-3 rounded-full mb-3">
+                  <FileCheck size={24} className="text-orange-600" />
                 </div>
-              )}
-            </div>
+                <p className="font-medium text-gray-700 mb-1">{importFile.name}</p>
+                <p className="text-sm text-gray-500 mb-4">
+                  {Math.round(importFile.size / 1024)} KB • {importFile.type || 'Unknown type'}
+                </p>
+                
+                {previewData && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    className="w-full bg-gray-50 rounded-md p-3 mb-4 text-left overflow-auto max-h-40"
+                  >
+                    <pre className="text-xs text-gray-600 font-mono">
+                      {previewData.content}
+                    </pre>
+                    <div className="text-xs text-gray-400 mt-1">
+                      {previewData.type === 'error' ? '' : 'Preview of first few lines'}
+                    </div>
+                  </motion.div>
+                )}
 
-            <div
-              className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${dragActive ? 'border-orange-400 bg-orange-50' : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50'}`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              {importFile ? (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex flex-col items-center"
-                >
-                  <div className="bg-orange-100 p-3 rounded-full mb-3">
-                    <FileCheck size={24} className="text-orange-600" />
-                  </div>
-                  <p className="font-medium text-gray-700 mb-1">{importFile.name}</p>
-                  <p className="text-sm text-gray-500 mb-4">
-                    {Math.round(importFile.size / 1024)} KB • {importFile.type || 'Unknown type'}
-                  </p>
-
-                  {previewData && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      className="w-full bg-gray-50 rounded-md p-3 mb-4 text-left overflow-auto max-h-40"
-                    >
-                      <pre className="text-xs text-gray-600 font-mono">
-                        {previewData.content}
-                      </pre>
-                      <div className="text-xs text-gray-400 mt-1">
-                        {previewData.type === 'error' ? '' : 'Preview of first few lines'}
-                      </div>
-                    </motion.div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={clearFile}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center text-sm"
-                      disabled={isOperationLoading('import')}
-                    >
-                      <X size={16} className="mr-1" />
-                      Change File
-                    </button>
-                    <button
-                      onClick={handleImport}
-                      disabled={isOperationLoading('import') || tableData.length > 0}
-                      className={`px-4 py-1.5 ${tableData.length > 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-orange-600 hover:bg-orange-700'} text-white rounded-md disabled:bg-orange-300 flex items-center text-sm`}
-                    >
-                      {isOperationLoading('import') ? (
-                        <>
-                          <Loader size={16} className="mr-1 animate-spin" />
-                          Importing...
-                        </>
-                      ) : tableData.length > 0 ? (
-                        <>
-                          <Check size={16} className="mr-1" />
-                          Imported
-                        </>
-                      ) : (
-                        <>
-                          <Download size={16} className="mr-1" />
-                          Import File
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex flex-col items-center"
-                >
-                  <div className="bg-orange-100 p-3 rounded-full mb-3">
-                    <Upload size={24} className="text-orange-600" />
-                  </div>
-                  <p className="font-medium text-gray-700 mb-1">Drag & drop your file here</p>
-                  <p className="text-sm text-gray-500 mb-4">or</p>
-                  <label className="cursor-pointer px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 flex items-center text-sm shadow-sm">
-                    <FileUp size={16} className="mr-2" />
-                    <span>Browse Files</span>
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".csv,.json,.xlsx,.xls"
-                      onChange={handleFileChange}
-                    />
-                  </label>
-                  <p className="text-xs text-gray-400 mt-4">
-                    Supported formats: CSV, JSON, Excel (.xlsx, .xls) • Max 10MB
-                  </p>
-                </motion.div>
-              )}
-            </div>
-          </motion.div>
-        )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={clearFile}
+                    className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center text-sm"
+                    disabled={isOperationLoading('import')}
+                  >
+                    <X size={16} className="mr-1" />
+                    Change File
+                  </button>
+                  <button
+                    onClick={handleImport}
+                    disabled={isOperationLoading('import') || tableData.length > 0}
+                    className={`px-4 py-1.5 ${tableData.length > 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-orange-600 hover:bg-orange-700'} text-white rounded-md disabled:bg-orange-300 flex items-center text-sm`}
+                  >
+                    {isOperationLoading('import') ? (
+                      <>
+                        <Loader size={16} className="mr-1 animate-spin" />
+                        Importing...
+                      </>
+                    ) : tableData.length > 0 ? (
+                      <>
+                        <Check size={16} className="mr-1" />
+                        Imported
+                      </>
+                    ) : (
+                      <>
+                        <Download size={16} className="mr-1" />
+                        Import File
+                      </>
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex flex-col items-center"
+              >
+                <div className="bg-orange-100 p-3 rounded-full mb-3">
+                  <Upload size={24} className="text-orange-600" />
+                </div>
+                <p className="font-medium text-gray-700 mb-1">Drag & drop your file here</p>
+                <p className="text-sm text-gray-500 mb-4">or</p>
+                <label className="cursor-pointer px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 flex items-center text-sm shadow-sm">
+                  <FileUp size={16} className="mr-2" />
+                  <span>Browse Files</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".csv,.json,.xlsx,.xls"
+                    onChange={handleFileChange}
+                  />
+                </label>
+                <p className="text-xs text-gray-400 mt-4">
+                  Supported formats: CSV, JSON, Excel (.xlsx, .xls) • Max 10MB
+                </p>
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
 
         {/* Export Options (shown only when there's data) */}
         {tableData.length > 0 && (
           <>
             {/* Start Over Button */}
-            <motion.div
+            <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="flex justify-end"
@@ -595,8 +557,8 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
                         {formatIcons[format]}
                       </div>
                       <h3 className="text-md font-medium capitalize">
-                        {format === 'jsonl' ? 'JSON Lines' :
-                         format === 'excel' ? 'Excel' :
+                        {format === 'jsonl' ? 'JSON Lines' : 
+                         format === 'excel' ? 'Excel' : 
                          format.toUpperCase()}
                       </h3>
                     </div>
@@ -611,8 +573,8 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
                       onClick={() => handleExport(format)}
                       disabled={isLoading}
                       className={`w-full py-2 rounded-md flex justify-center items-center gap-2 text-sm ${
-                        isOperationLoading(`export-${format}`)
-                          ? 'bg-orange-300 text-white'
+                        isOperationLoading(`export-${format}`) 
+                          ? 'bg-orange-300 text-white' 
                           : 'bg-orange-600 hover:bg-orange-700 text-white'
                       }`}
                     >
@@ -715,8 +677,8 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
                           onClick={() => handleExport(format, format === 'train_test_split' || format === 'bundle' ? { splitRatio } : {})}
                           disabled={isLoading}
                           className={`w-full py-2 rounded-md flex justify-center items-center gap-2 text-sm ${
-                            isOperationLoading(`export-${format}`)
-                              ? 'bg-orange-300 text-white'
+                            isOperationLoading(`export-${format}`) 
+                              ? 'bg-orange-300 text-white' 
                               : 'bg-orange-600 hover:bg-orange-700 text-white'
                           }`}
                         >
@@ -742,4 +704,4 @@ const ExportImportTab = ({ processedData, setActiveTab }) => {
   );
 };
 
-export default ExportImportTab;
+export default ExportImportTab

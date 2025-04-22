@@ -4,21 +4,34 @@ import PreviewTab from '../syn/PreviewTab';
 import ValidationTab from '../syn/ValidationTab';
 import CleaningTab from '../syn/CleaningTab';
 import ExportTab from '../syn/ExportTab';
+import Visual from '../syn/Visualizer';
+import Bot from '../syn/Bot';
 import SettingsTab from '../syn/SettingsTab';
-import { setActiveTab } from 'react';
 
-const MainContent = ({ activeTab, generatedData, dataConfig, isGenerating, handleGenerate, handleClearData, handleConfigChange, handleExport }) => {
+const MainContent = ({
+  activeTab,
+  generatedData,
+  dataConfig,
+  isGenerating,
+  handleGenerate,
+  handleClearData,
+  handleConfigChange,
+  handleExport,
+  setActiveTab // <-- Important for Preview, Bot, Validation, etc.
+}) => {
   const renderTab = () => {
     switch (activeTab) {
       case 'generator':
-        return <GeneratorTab
-          generatedData={generatedData}
-          dataConfig={dataConfig}
-          isGenerating={isGenerating}
-          handleGenerate={handleGenerate}
-          handleClearData={handleClearData}
-          handleConfigChange={handleConfigChange}
-        />;
+        return (
+          <GeneratorTab
+            generatedData={generatedData}
+            dataConfig={dataConfig}
+            isGenerating={isGenerating}
+            handleGenerate={handleGenerate}
+            handleClearData={handleClearData}
+            handleConfigChange={handleConfigChange}
+          />
+        );
       case 'preview':
         return <PreviewTab generatedData={generatedData} setActiveTab={setActiveTab} />;
       case 'validation':
@@ -27,6 +40,10 @@ const MainContent = ({ activeTab, generatedData, dataConfig, isGenerating, handl
         return <CleaningTab generatedData={generatedData} setActiveTab={setActiveTab} />;
       case 'export':
         return <ExportTab generatedData={generatedData} handleExport={handleExport} />;
+      case 'visualizer':
+        return <Visual generatedData={generatedData} />;
+      case 'bot':
+        return <Bot generatedData={generatedData} />;
       case 'settings':
         return <SettingsTab />;
       default:
