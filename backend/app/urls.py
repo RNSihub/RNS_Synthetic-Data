@@ -28,5 +28,5 @@ urlpatterns = [
     path('api/get-csrf-token/', export.get_csrf_token , name='get_csrf_token'),
     
     #bot
-    path('api/bot-chat/', bot.generate_data_view, name='bot-chat'),
+    path('api/bot-chat/', bot.generate_synthetic_data, name='bot-chat'),
 ]

@@ -188,3 +188,4 @@ os.makedirs(MERGED_CSV_DIR, exist_ok=True)
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
 ]
+
